@@ -7,6 +7,10 @@ uvicorn[standard]==0.30.6
 # Async SQLite support
 aiosqlite==0.20.0
 
+# LLM integration
+openai==1.54.3
+python-dotenv==1.0.1
+
 # Testing
 pytest==8.3.3
 pytest-asyncio==0.24.0

@@ -65,3 +65,24 @@ class PaymentJourney(BaseModel):
     
     # Evidence classification
     evidence: List[Evidence]
+
+
+class Diagnosis(BaseModel):
+    """LLM-generated diagnostic explanation."""
+    summary: str
+    what_happened: str
+    what_is_known: List[str]
+    what_cannot_be_determined: List[str]
+    recommended_action: str
+    raw_explanation: str  # Full LLM response for transparency
+
+
+class DiagnosticResponse(BaseModel):
+    """Complete diagnostic response with journey and explanation."""
+    order_id: str
+    journey: PaymentJourney
+    diagnosis: Diagnosis
+    
+    # Metadata
+    llm_model: str
+    evidence_based: bool  # Always True - diagnosis based only on evidence

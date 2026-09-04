@@ -41,6 +41,7 @@ env/
 *.db
 *.sqlite
 *.sqlite3
+paymenttrace.db
 
 # Environment variables
 .env

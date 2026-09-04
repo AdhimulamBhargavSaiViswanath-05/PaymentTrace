@@ -1,0 +1,8 @@
+# FastAPI framework
+fastapi==0.115.0
+
+# ASGI server
+uvicorn[standard]==0.30.6
+
+# Async SQLite support (for future use)
+aiosqlite==0.20.0

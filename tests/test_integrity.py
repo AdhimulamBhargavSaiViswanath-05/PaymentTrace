@@ -543,3 +543,499 @@ async def test_webhook_events_do_not_affect_validation(setup_database):
                        "state_machine_validation" in (e.source or "")]
     
     assert len(state_violations) == 0
+
+
+# ============================================================================
+# Phase 4B: Out-of-Order Event Detection Tests
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_valid_event_ordering(setup_database):
+    """
+    Test that properly ordered events (initiated → authorized → captured)
+    do NOT produce out-of-order violations.
+    """
+    order_id = "test_valid_ordering"
+    payment_id = "pay_ordered_1"
+    
+    await insert_order(
+        order_id=order_id,
+        created_at="2026-09-05T10:00:00Z",
+        amount=1000,
+        currency="INR"
+    )
+    
+    await insert_payment_attempt(
+        attempt_id="attempt_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        method="card",
+        attempt_number=1,
+        status="captured",
+        created_at="2026-09-05T10:00:05Z"
+    )
+    
+    # Properly ordered: initiated (10:00:05) → authorized (10:00:10) → captured (10:00:15)
+    await insert_payment_event(
+        event_id="event_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.initiated",
+        status="created",
+        timestamp="2026-09-05T10:00:05Z"
+    )
+    
+    await insert_payment_event(
+        event_id="event_2",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.authorized",
+        status="authorized",
+        timestamp="2026-09-05T10:00:10Z"
+    )
+    
+    await insert_payment_event(
+        event_id="event_3",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.captured",
+        status="captured",
+        timestamp="2026-09-05T10:00:15Z"
+    )
+    
+    # Reconstruct journey
+    journey = await reconstruct_journey(order_id)
+    assert journey is not None
+    
+    # Check for out-of-order violations
+    ordering_violations = [e for e in journey.evidence if 
+                          e.category == "INCONSISTENCY" and 
+                          "out_of_order_detection" in (e.source or "")]
+    
+    assert len(ordering_violations) == 0, \
+        f"Valid ordering should not produce violations: {[v.statement for v in ordering_violations]}"
+
+
+@pytest.mark.asyncio
+async def test_authorized_before_initiated(setup_database):
+    """
+    Test detection of authorized event occurring before initiated event.
+    """
+    order_id = "test_auth_before_init"
+    payment_id = "pay_outoforder_1"
+    
+    await insert_order(
+        order_id=order_id,
+        created_at="2026-09-05T10:00:00Z",
+        amount=1000,
+        currency="INR"
+    )
+    
+    await insert_payment_attempt(
+        attempt_id="attempt_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        method="card",
+        attempt_number=1,
+        status="authorized",
+        created_at="2026-09-05T10:00:05Z"
+    )
+    
+    # Out of order: authorized (10:00:05) BEFORE initiated (10:00:10)
+    await insert_payment_event(
+        event_id="event_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.authorized",
+        status="authorized",
+        timestamp="2026-09-05T10:00:05Z"
+    )
+    
+    await insert_payment_event(
+        event_id="event_2",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.initiated",
+        status="created",
+        timestamp="2026-09-05T10:00:10Z"
+    )
+    
+    # Reconstruct journey
+    journey = await reconstruct_journey(order_id)
+    assert journey is not None
+    
+    # Check for out-of-order violation
+    ordering_violations = [e for e in journey.evidence if 
+                          e.category == "INCONSISTENCY" and 
+                          "out_of_order_detection" in (e.source or "")]
+    
+    assert len(ordering_violations) == 1
+    assert "authorized" in ordering_violations[0].statement.lower()
+    assert "before" in ordering_violations[0].statement.lower()
+    assert "initiated" in ordering_violations[0].statement.lower()
+
+
+@pytest.mark.asyncio
+async def test_captured_before_authorized(setup_database):
+    """
+    Test detection of captured event occurring before authorized event.
+    """
+    order_id = "test_cap_before_auth"
+    payment_id = "pay_outoforder_2"
+    
+    await insert_order(
+        order_id=order_id,
+        created_at="2026-09-05T10:00:00Z",
+        amount=1000,
+        currency="INR"
+    )
+    
+    await insert_payment_attempt(
+        attempt_id="attempt_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        method="card",
+        attempt_number=1,
+        status="captured",
+        created_at="2026-09-05T10:00:05Z"
+    )
+    
+    # Out of order: captured (10:00:08) BEFORE authorized (10:00:10)
+    await insert_payment_event(
+        event_id="event_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.initiated",
+        status="created",
+        timestamp="2026-09-05T10:00:05Z"
+    )
+    
+    await insert_payment_event(
+        event_id="event_2",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.captured",
+        status="captured",
+        timestamp="2026-09-05T10:00:08Z"
+    )
+    
+    await insert_payment_event(
+        event_id="event_3",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.authorized",
+        status="authorized",
+        timestamp="2026-09-05T10:00:10Z"
+    )
+    
+    # Reconstruct journey
+    journey = await reconstruct_journey(order_id)
+    assert journey is not None
+    
+    # Check for out-of-order violation
+    ordering_violations = [e for e in journey.evidence if 
+                          e.category == "INCONSISTENCY" and 
+                          "out_of_order_detection" in (e.source or "")]
+    
+    assert len(ordering_violations) >= 1
+    violations_text = " ".join([v.statement for v in ordering_violations])
+    assert "captured" in violations_text.lower()
+    assert "before" in violations_text.lower()
+
+
+@pytest.mark.asyncio
+async def test_captured_before_initiated(setup_database):
+    """
+    Test detection of captured event occurring before initiated event.
+    """
+    order_id = "test_cap_before_init"
+    payment_id = "pay_outoforder_3"
+    
+    await insert_order(
+        order_id=order_id,
+        created_at="2026-09-05T10:00:00Z",
+        amount=1000,
+        currency="INR"
+    )
+    
+    await insert_payment_attempt(
+        attempt_id="attempt_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        method="card",
+        attempt_number=1,
+        status="captured",
+        created_at="2026-09-05T10:00:05Z"
+    )
+    
+    # Out of order: captured (10:00:05) BEFORE initiated (10:00:10)
+    await insert_payment_event(
+        event_id="event_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.captured",
+        status="captured",
+        timestamp="2026-09-05T10:00:05Z"
+    )
+    
+    await insert_payment_event(
+        event_id="event_2",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.initiated",
+        status="created",
+        timestamp="2026-09-05T10:00:10Z"
+    )
+    
+    await insert_payment_event(
+        event_id="event_3",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.authorized",
+        status="authorized",
+        timestamp="2026-09-05T10:00:12Z"
+    )
+    
+    # Reconstruct journey
+    journey = await reconstruct_journey(order_id)
+    assert journey is not None
+    
+    # Check for out-of-order violation
+    ordering_violations = [e for e in journey.evidence if 
+                          e.category == "INCONSISTENCY" and 
+                          "out_of_order_detection" in (e.source or "")]
+    
+    assert len(ordering_violations) >= 1
+    violations_text = " ".join([v.statement for v in ordering_violations])
+    assert "captured" in violations_text.lower()
+    assert "before" in violations_text.lower()
+
+
+@pytest.mark.asyncio
+async def test_webhook_does_not_create_out_of_order_violation(setup_database):
+    """
+    Test that webhook events do not trigger out-of-order violations.
+    """
+    order_id = "test_webhook_ordering"
+    payment_id = "pay_webhook_1"
+    
+    await insert_order(
+        order_id=order_id,
+        created_at="2026-09-05T10:00:00Z",
+        amount=1000,
+        currency="INR"
+    )
+    
+    await insert_payment_attempt(
+        attempt_id="attempt_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        method="card",
+        attempt_number=1,
+        status="captured",
+        created_at="2026-09-05T10:00:05Z"
+    )
+    
+    # Valid ordering with webhook in between
+    await insert_payment_event(
+        event_id="event_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.initiated",
+        status="created",
+        timestamp="2026-09-05T10:00:05Z"
+    )
+    
+    await insert_payment_event(
+        event_id="event_2",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="webhook.received",
+        status="created",
+        timestamp="2026-09-05T10:00:08Z"
+    )
+    
+    await insert_payment_event(
+        event_id="event_3",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.authorized",
+        status="authorized",
+        timestamp="2026-09-05T10:00:10Z"
+    )
+    
+    await insert_payment_event(
+        event_id="event_4",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.captured",
+        status="captured",
+        timestamp="2026-09-05T10:00:15Z"
+    )
+    
+    # Reconstruct journey
+    journey = await reconstruct_journey(order_id)
+    assert journey is not None
+    
+    # Webhook should not cause out-of-order violations
+    ordering_violations = [e for e in journey.evidence if 
+                          e.category == "INCONSISTENCY" and 
+                          "out_of_order_detection" in (e.source or "")]
+    
+    assert len(ordering_violations) == 0
+
+
+@pytest.mark.asyncio
+async def test_multiple_payment_ids_validated_independently(setup_database):
+    """
+    Test that out-of-order detection validates each payment_id independently.
+    """
+    order_id = "test_multi_payment"
+    payment_id_1 = "pay_multi_1"
+    payment_id_2 = "pay_multi_2"
+    
+    await insert_order(
+        order_id=order_id,
+        created_at="2026-09-05T10:00:00Z",
+        amount=1000,
+        currency="INR"
+    )
+    
+    # Attempt 1 - valid ordering
+    await insert_payment_attempt(
+        attempt_id="attempt_1",
+        order_id=order_id,
+        payment_id=payment_id_1,
+        method="upi",
+        attempt_number=1,
+        status="failed",
+        created_at="2026-09-05T10:00:05Z"
+    )
+    
+    await insert_payment_event(
+        event_id="event_1_1",
+        order_id=order_id,
+        payment_id=payment_id_1,
+        event_type="payment.initiated",
+        status="created",
+        timestamp="2026-09-05T10:00:05Z"
+    )
+    
+    await insert_payment_event(
+        event_id="event_1_2",
+        order_id=order_id,
+        payment_id=payment_id_1,
+        event_type="payment.failed",
+        status="failed",
+        timestamp="2026-09-05T10:00:08Z"
+    )
+    
+    # Attempt 2 - out of order (authorized before initiated)
+    await insert_payment_attempt(
+        attempt_id="attempt_2",
+        order_id=order_id,
+        payment_id=payment_id_2,
+        method="upi",
+        attempt_number=2,
+        status="captured",
+        created_at="2026-09-05T10:01:00Z"
+    )
+    
+    await insert_payment_event(
+        event_id="event_2_1",
+        order_id=order_id,
+        payment_id=payment_id_2,
+        event_type="payment.authorized",
+        status="authorized",
+        timestamp="2026-09-05T10:01:00Z"
+    )
+    
+    await insert_payment_event(
+        event_id="event_2_2",
+        order_id=order_id,
+        payment_id=payment_id_2,
+        event_type="payment.initiated",
+        status="created",
+        timestamp="2026-09-05T10:01:05Z"
+    )
+    
+    await insert_payment_event(
+        event_id="event_2_3",
+        order_id=order_id,
+        payment_id=payment_id_2,
+        event_type="payment.captured",
+        status="captured",
+        timestamp="2026-09-05T10:01:10Z"
+    )
+    
+    # Reconstruct journey
+    journey = await reconstruct_journey(order_id)
+    assert journey is not None
+    
+    # Should detect out-of-order only for payment_id_2
+    ordering_violations = [e for e in journey.evidence if 
+                          e.category == "INCONSISTENCY" and 
+                          "out_of_order_detection" in (e.source or "")]
+    
+    assert len(ordering_violations) == 1
+    assert payment_id_2 in ordering_violations[0].statement
+
+
+@pytest.mark.asyncio
+async def test_existing_scenario_a_no_out_of_order_violations(setup_database):
+    """
+    Test that existing Scenario A has no out-of-order violations.
+    """
+    await load_fixtures()
+    
+    journey = await reconstruct_journey("order_scenario_a")
+    assert journey is not None
+    
+    # Scenario A has valid ordering in both attempts
+    ordering_violations = [e for e in journey.evidence if 
+                          e.category == "INCONSISTENCY" and 
+                          "out_of_order_detection" in (e.source or "")]
+    
+    assert len(ordering_violations) == 0, \
+        f"Scenario A should not have ordering violations: {[v.statement for v in ordering_violations]}"
+
+
+@pytest.mark.asyncio
+async def test_existing_scenario_b_no_out_of_order_violations(setup_database):
+    """
+    Test that existing Scenario B has no out-of-order violations.
+    """
+    await load_fixtures()
+    
+    journey = await reconstruct_journey("order_scenario_b")
+    assert journey is not None
+    
+    # Scenario B has valid ordering (though delayed)
+    ordering_violations = [e for e in journey.evidence if 
+                          e.category == "INCONSISTENCY" and 
+                          "out_of_order_detection" in (e.source or "")]
+    
+    assert len(ordering_violations) == 0, \
+        f"Scenario B should not have ordering violations: {[v.statement for v in ordering_violations]}"
+
+
+@pytest.mark.asyncio
+async def test_scenario_e_detects_out_of_order_event(setup_database):
+    """
+    Test that Scenario E (authorized before initiated) is correctly detected.
+    """
+    await load_fixtures()
+    
+    journey = await reconstruct_journey("order_scenario_e")
+    assert journey is not None
+    
+    # Scenario E should produce out-of-order violation
+    ordering_violations = [e for e in journey.evidence if 
+                          e.category == "INCONSISTENCY" and 
+                          "out_of_order_detection" in (e.source or "")]
+    
+    assert len(ordering_violations) >= 1
+    violations_text = " ".join([v.statement for v in ordering_violations])
+    assert "authorized" in violations_text.lower()
+    assert "before" in violations_text.lower()
+    assert "initiated" in violations_text.lower()

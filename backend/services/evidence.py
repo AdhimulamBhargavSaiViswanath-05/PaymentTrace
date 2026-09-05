@@ -10,7 +10,7 @@ Classifies facts into four categories:
 
 from typing import List
 from ..models import Order, PaymentEvent, PaymentAttempt, Evidence
-from .integrity import validate_state_transitions
+from .integrity import validate_state_transitions, detect_out_of_order_events
 
 
 def classify_evidence(order: Order, events: List[PaymentEvent], 
@@ -166,5 +166,10 @@ def classify_evidence(order: Order, events: List[PaymentEvent],
     # Validate payment state transitions and detect lifecycle violations
     state_violations = validate_state_transitions(events, attempts)
     evidence_list.extend(state_violations)
+    
+    # Phase 4B: Out-of-order event detection
+    # Detect logically invalid timestamp ordering
+    ordering_violations = detect_out_of_order_events(events)
+    evidence_list.extend(ordering_violations)
     
     return evidence_list

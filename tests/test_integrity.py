@@ -2,6 +2,9 @@
 Tests for payment journey integrity validation.
 
 Phase 4A: State machine validation tests.
+Phase 4B: Out-of-order event detection tests.
+Phase 4C: Duplicate and missing event detection tests.
+Phase 4D: Timeline gap and timing anomaly detection tests.
 """
 
 import pytest
@@ -1584,3 +1587,608 @@ async def test_existing_scenarios_no_phase4c_false_positives(setup_database):
                   e.category == "INCONSISTENCY" and
                   "duplicate_detection" in (e.source or "")]
     assert len(duplicate_b) == 0, "Scenario B should not have duplicate violations"
+
+
+# ============================================================================
+# Phase 4D: Timeline Gap / Timing Anomaly Detection Tests
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_no_timeline_gaps_in_normal_flow(setup_database):
+    """
+    Test that valid flow with normal gaps (5-10s) produces no timeline findings.
+    """
+    order_id = "test_normal_timing"
+    payment_id = "pay_normal_1"
+
+    await insert_order(
+        order_id=order_id,
+        created_at="2026-09-05T16:00:00Z",
+        amount=1000,
+        currency="INR"
+    )
+
+    await insert_payment_attempt(
+        attempt_id="attempt_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        method="card",
+        attempt_number=1,
+        status="captured",
+        created_at="2026-09-05T16:00:05Z"
+    )
+
+    # Normal gaps: 5s init→auth, 7s auth→cap
+    await insert_payment_event(
+        event_id="event_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.initiated",
+        status="created",
+        timestamp="2026-09-05T16:00:05Z"
+    )
+
+    await insert_payment_event(
+        event_id="event_2",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.authorized",
+        status="authorized",
+        timestamp="2026-09-05T16:00:10Z"
+    )
+
+    await insert_payment_event(
+        event_id="event_3",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.captured",
+        status="captured",
+        timestamp="2026-09-05T16:00:17Z"
+    )
+
+    # Reconstruct journey
+    journey = await reconstruct_journey(order_id)
+    assert journey is not None
+
+    # Check for timeline gap findings
+    timeline_findings = [e for e in journey.evidence if
+                        e.category == "UNKNOWN" and
+                        "timeline_gap_detection" in (e.source or "")]
+
+    assert len(timeline_findings) == 0, \
+        f"Normal timing should not produce timeline findings: {[f.statement for f in timeline_findings]}"
+
+
+@pytest.mark.asyncio
+async def test_long_initiated_to_authorized_gap_detected(setup_database):
+    """
+    Test detection of initiated → authorized gap > 90s.
+    """
+    order_id = "test_long_init_auth"
+    payment_id = "pay_long_1"
+
+    await insert_order(
+        order_id=order_id,
+        created_at="2026-09-05T16:10:00Z",
+        amount=1000,
+        currency="INR"
+    )
+
+    await insert_payment_attempt(
+        attempt_id="attempt_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        method="card",
+        attempt_number=1,
+        status="captured",
+        created_at="2026-09-05T16:10:00Z"
+    )
+
+    # 100s gap (> 90s threshold)
+    await insert_payment_event(
+        event_id="event_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.initiated",
+        status="created",
+        timestamp="2026-09-05T16:10:00Z"
+    )
+
+    await insert_payment_event(
+        event_id="event_2",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.authorized",
+        status="authorized",
+        timestamp="2026-09-05T16:11:40Z"  # 100s later
+    )
+
+    await insert_payment_event(
+        event_id="event_3",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.captured",
+        status="captured",
+        timestamp="2026-09-05T16:11:45Z"
+    )
+
+    # Reconstruct journey
+    journey = await reconstruct_journey(order_id)
+    assert journey is not None
+
+    # Check for timeline gap finding
+    timeline_findings = [e for e in journey.evidence if
+                        e.category == "UNKNOWN" and
+                        "timeline_gap_detection: initiated_to_authorized" in (e.source or "")]
+
+    assert len(timeline_findings) == 1
+    assert "100.0s" in timeline_findings[0].statement
+    assert payment_id in timeline_findings[0].statement
+    assert "does not necessarily indicate a payment failure" in timeline_findings[0].statement
+
+
+@pytest.mark.asyncio
+async def test_long_authorized_to_captured_gap_detected(setup_database):
+    """
+    Test detection of authorized → captured gap > 45s.
+    """
+    order_id = "test_long_auth_cap"
+    payment_id = "pay_long_2"
+
+    await insert_order(
+        order_id=order_id,
+        created_at="2026-09-05T16:20:00Z",
+        amount=1000,
+        currency="INR"
+    )
+
+    await insert_payment_attempt(
+        attempt_id="attempt_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        method="card",
+        attempt_number=1,
+        status="captured",
+        created_at="2026-09-05T16:20:00Z"
+    )
+
+    # 60s auth→cap gap (> 45s threshold)
+    await insert_payment_event(
+        event_id="event_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.initiated",
+        status="created",
+        timestamp="2026-09-05T16:20:00Z"
+    )
+
+    await insert_payment_event(
+        event_id="event_2",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.authorized",
+        status="authorized",
+        timestamp="2026-09-05T16:20:10Z"
+    )
+
+    await insert_payment_event(
+        event_id="event_3",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.captured",
+        status="captured",
+        timestamp="2026-09-05T16:21:10Z"  # 60s after authorized
+    )
+
+    # Reconstruct journey
+    journey = await reconstruct_journey(order_id)
+    assert journey is not None
+
+    # Check for timeline gap finding
+    timeline_findings = [e for e in journey.evidence if
+                        e.category == "UNKNOWN" and
+                        "timeline_gap_detection: authorized_to_captured" in (e.source or "")]
+
+    assert len(timeline_findings) == 1
+    assert "60.0s" in timeline_findings[0].statement
+    assert payment_id in timeline_findings[0].statement
+
+
+@pytest.mark.asyncio
+async def test_near_zero_gap_detected(setup_database):
+    """
+    Test detection of near-zero gap (< 50ms).
+    """
+    order_id = "test_near_zero"
+    payment_id = "pay_nearzero_1"
+
+    await insert_order(
+        order_id=order_id,
+        created_at="2026-09-05T16:30:00Z",
+        amount=1000,
+        currency="INR"
+    )
+
+    await insert_payment_attempt(
+        attempt_id="attempt_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        method="upi",
+        attempt_number=1,
+        status="captured",
+        created_at="2026-09-05T16:30:00Z"
+    )
+
+    # 30ms gaps (< 50ms threshold)
+    await insert_payment_event(
+        event_id="event_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.initiated",
+        status="created",
+        timestamp="2026-09-05T16:30:00.000Z"
+    )
+
+    await insert_payment_event(
+        event_id="event_2",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.authorized",
+        status="authorized",
+        timestamp="2026-09-05T16:30:00.030Z"
+    )
+
+    await insert_payment_event(
+        event_id="event_3",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.captured",
+        status="captured",
+        timestamp="2026-09-05T16:30:00.060Z"
+    )
+
+    # Reconstruct journey
+    journey = await reconstruct_journey(order_id)
+    assert journey is not None
+
+    # Check for near-zero gap findings
+    timeline_findings = [e for e in journey.evidence if
+                        e.category == "UNKNOWN" and
+                        "timeline_gap_detection: near_zero_gap" in (e.source or "")]
+
+    # Should detect 2 near-zero gaps
+    assert len(timeline_findings) == 2
+    findings_text = " ".join([f.statement for f in timeline_findings])
+    assert "ms" in findings_text.lower()
+    assert "timestamp precision" in findings_text.lower()
+
+
+@pytest.mark.asyncio
+async def test_webhook_timing_does_not_trigger_gap_detection(setup_database):
+    """
+    Test that webhook.received events do not trigger timeline gap detection.
+    """
+    order_id = "test_webhook_timing"
+    payment_id = "pay_webhook_1"
+
+    await insert_order(
+        order_id=order_id,
+        created_at="2026-09-05T16:40:00Z",
+        amount=1000,
+        currency="INR"
+    )
+
+    await insert_payment_attempt(
+        attempt_id="attempt_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        method="card",
+        attempt_number=1,
+        status="captured",
+        created_at="2026-09-05T16:40:00Z"
+    )
+
+    # Normal lifecycle with late webhook
+    await insert_payment_event(
+        event_id="event_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.initiated",
+        status="created",
+        timestamp="2026-09-05T16:40:00Z"
+    )
+
+    await insert_payment_event(
+        event_id="event_2",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.authorized",
+        status="authorized",
+        timestamp="2026-09-05T16:40:10Z"
+    )
+
+    await insert_payment_event(
+        event_id="event_3",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.captured",
+        status="captured",
+        timestamp="2026-09-05T16:40:15Z"
+    )
+
+    # Webhook arrives 200 seconds later (would trigger if checked)
+    await insert_payment_event(
+        event_id="event_4",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="webhook.received",
+        status="captured",
+        timestamp="2026-09-05T16:43:35Z"
+    )
+
+    # Reconstruct journey
+    journey = await reconstruct_journey(order_id)
+    assert journey is not None
+
+    # Webhooks should not cause timeline findings
+    timeline_findings = [e for e in journey.evidence if
+                        e.category == "UNKNOWN" and
+                        "timeline_gap_detection" in (e.source or "")]
+
+    assert len(timeline_findings) == 0
+
+
+@pytest.mark.asyncio
+async def test_failed_payment_does_not_check_init_to_auth_gap(setup_database):
+    """
+    Test that failed payments without authorization do not trigger init→auth gap.
+    """
+    order_id = "test_failed_no_auth"
+    payment_id = "pay_failed_1"
+
+    await insert_order(
+        order_id=order_id,
+        created_at="2026-09-05T16:50:00Z",
+        amount=1000,
+        currency="INR"
+    )
+
+    await insert_payment_attempt(
+        attempt_id="attempt_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        method="upi",
+        attempt_number=1,
+        status="failed",
+        created_at="2026-09-05T16:50:00Z"
+    )
+
+    # Payment fails without authorization
+    await insert_payment_event(
+        event_id="event_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.initiated",
+        status="created",
+        timestamp="2026-09-05T16:50:00Z"
+    )
+
+    await insert_payment_event(
+        event_id="event_2",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.failed",
+        status="failed",
+        timestamp="2026-09-05T16:50:08Z"
+    )
+
+    # Reconstruct journey
+    journey = await reconstruct_journey(order_id)
+    assert journey is not None
+
+    # Should not trigger init→auth gap (no authorized event)
+    timeline_findings = [e for e in journey.evidence if
+                        e.category == "UNKNOWN" and
+                        "timeline_gap_detection: initiated_to_authorized" in (e.source or "")]
+
+    assert len(timeline_findings) == 0
+
+
+@pytest.mark.asyncio
+async def test_multiple_payment_ids_validated_independently_for_gaps(setup_database):
+    """
+    Test that timeline gap detection validates each payment_id independently.
+    """
+    order_id = "test_multi_payment_gaps"
+    payment_id_1 = "pay_multi_gap_1"
+    payment_id_2 = "pay_multi_gap_2"
+
+    await insert_order(
+        order_id=order_id,
+        created_at="2026-09-05T17:00:00Z",
+        amount=1000,
+        currency="INR"
+    )
+
+    # Attempt 1 - normal timing
+    await insert_payment_attempt(
+        attempt_id="attempt_1",
+        order_id=order_id,
+        payment_id=payment_id_1,
+        method="upi",
+        attempt_number=1,
+        status="failed",
+        created_at="2026-09-05T17:00:00Z"
+    )
+
+    await insert_payment_event(
+        event_id="event_1_1",
+        order_id=order_id,
+        payment_id=payment_id_1,
+        event_type="payment.initiated",
+        status="created",
+        timestamp="2026-09-05T17:00:00Z"
+    )
+
+    await insert_payment_event(
+        event_id="event_1_2",
+        order_id=order_id,
+        payment_id=payment_id_1,
+        event_type="payment.failed",
+        status="failed",
+        timestamp="2026-09-05T17:00:08Z"
+    )
+
+    # Attempt 2 - long gap
+    await insert_payment_attempt(
+        attempt_id="attempt_2",
+        order_id=order_id,
+        payment_id=payment_id_2,
+        method="upi",
+        attempt_number=2,
+        status="captured",
+        created_at="2026-09-05T17:01:00Z"
+    )
+
+    await insert_payment_event(
+        event_id="event_2_1",
+        order_id=order_id,
+        payment_id=payment_id_2,
+        event_type="payment.initiated",
+        status="created",
+        timestamp="2026-09-05T17:01:00Z"
+    )
+
+    await insert_payment_event(
+        event_id="event_2_2",
+        order_id=order_id,
+        payment_id=payment_id_2,
+        event_type="payment.authorized",
+        status="authorized",
+        timestamp="2026-09-05T17:02:50Z"  # 110s gap
+    )
+
+    await insert_payment_event(
+        event_id="event_2_3",
+        order_id=order_id,
+        payment_id=payment_id_2,
+        event_type="payment.captured",
+        status="captured",
+        timestamp="2026-09-05T17:02:55Z"
+    )
+
+    # Reconstruct journey
+    journey = await reconstruct_journey(order_id)
+    assert journey is not None
+
+    # Should only detect gap for payment_id_2
+    timeline_findings = [e for e in journey.evidence if
+                        e.category == "UNKNOWN" and
+                        "timeline_gap_detection" in (e.source or "")]
+
+    assert len(timeline_findings) == 1
+    assert payment_id_2 in timeline_findings[0].statement
+    assert payment_id_1 not in timeline_findings[0].statement
+
+
+@pytest.mark.asyncio
+async def test_scenario_a_has_no_timeline_gap_violations(setup_database):
+    """
+    Test that Scenario A (retry with 7-8s gaps) produces no timeline findings.
+    """
+    await load_fixtures()
+
+    journey = await reconstruct_journey("order_scenario_a")
+    assert journey is not None
+
+    # Scenario A has normal gaps within each attempt
+    timeline_findings = [e for e in journey.evidence if
+                        e.category == "UNKNOWN" and
+                        "timeline_gap_detection" in (e.source or "")]
+
+    assert len(timeline_findings) == 0, \
+        f"Scenario A should not have timeline violations: {[f.statement for f in timeline_findings]}"
+
+
+@pytest.mark.asyncio
+async def test_scenario_b_has_no_timeline_gap_violations(setup_database):
+    """
+    Test that Scenario B's valid 45s gap does NOT trigger 90s threshold.
+    CRITICAL: This test verifies no false positives on intentionally long but valid gaps.
+    """
+    await load_fixtures()
+
+    journey = await reconstruct_journey("order_scenario_b")
+    assert journey is not None
+
+    # Scenario B has a 45s init→auth gap, which is BELOW the 90s threshold
+    timeline_findings = [e for e in journey.evidence if
+                        e.category == "UNKNOWN" and
+                        "timeline_gap_detection" in (e.source or "")]
+
+    assert len(timeline_findings) == 0, \
+        f"Scenario B's 45s gap should NOT trigger (threshold is 90s): {[f.statement for f in timeline_findings]}"
+
+
+@pytest.mark.asyncio
+async def test_scenario_h_detects_long_gap(setup_database):
+    """
+    Test that Scenario H (120s gap) correctly produces UNKNOWN finding.
+    """
+    await load_fixtures()
+
+    journey = await reconstruct_journey("order_scenario_h")
+    assert journey is not None
+
+    # Scenario H should produce init→auth gap finding
+    timeline_findings = [e for e in journey.evidence if
+                        e.category == "UNKNOWN" and
+                        "timeline_gap_detection: initiated_to_authorized" in (e.source or "")]
+
+    assert len(timeline_findings) == 1
+    assert "120.0s" in timeline_findings[0].statement
+    assert "pay_h_longdelay" in timeline_findings[0].statement
+    assert "does not necessarily indicate a payment failure" in timeline_findings[0].statement
+
+
+@pytest.mark.asyncio
+async def test_scenario_i_detects_near_zero_gap(setup_database):
+    """
+    Test that Scenario I (20ms gaps) correctly produces UNKNOWN findings.
+    """
+    await load_fixtures()
+
+    journey = await reconstruct_journey("order_scenario_i")
+    assert journey is not None
+
+    # Scenario I should produce 2 near-zero gap findings
+    timeline_findings = [e for e in journey.evidence if
+                        e.category == "UNKNOWN" and
+                        "timeline_gap_detection: near_zero_gap" in (e.source or "")]
+
+    assert len(timeline_findings) == 2
+    findings_text = " ".join([f.statement for f in timeline_findings])
+    assert "20.0ms" in findings_text
+    assert "pay_i_nearzero" in findings_text
+    assert "timestamp precision" in findings_text.lower()
+
+
+@pytest.mark.asyncio
+async def test_existing_scenarios_c_e_f_g_no_phase4d_false_positives(setup_database):
+    """
+    Test that Scenarios C, E, F, G do not trigger Phase 4D detections.
+    """
+    await load_fixtures()
+
+    scenarios = ["order_scenario_c", "order_scenario_e", "order_scenario_f", "order_scenario_g"]
+
+    for scenario_id in scenarios:
+        journey = await reconstruct_journey(scenario_id)
+        assert journey is not None
+
+        timeline_findings = [e for e in journey.evidence if
+                            e.category == "UNKNOWN" and
+                            "timeline_gap_detection" in (e.source or "")]
+
+        assert len(timeline_findings) == 0, \
+            f"{scenario_id} should not have Phase 4D timeline findings: {[f.statement for f in timeline_findings]}"

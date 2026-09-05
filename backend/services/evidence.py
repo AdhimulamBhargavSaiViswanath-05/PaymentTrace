@@ -14,7 +14,8 @@ from .integrity import (
     validate_state_transitions,
     detect_out_of_order_events,
     detect_duplicate_lifecycle_events,
-    detect_missing_expected_events
+    detect_missing_expected_events,
+    detect_timeline_gaps
 )
 
 
@@ -185,5 +186,10 @@ def classify_evidence(order: Order, events: List[PaymentEvent],
     # Detect missing expected lifecycle events (conservative)
     missing_event_findings = detect_missing_expected_events(events)
     evidence_list.extend(missing_event_findings)
+
+    # Phase 4D: Timeline gap detection
+    # Detect suspicious timing anomalies in payment lifecycle
+    timeline_gaps = detect_timeline_gaps(events, attempts)
+    evidence_list.extend(timeline_gaps)
 
     return evidence_list

@@ -4,6 +4,7 @@ Advanced fixture scenarios for testing payment integrity validation.
 Phase 4A: State machine validation fixtures.
 Phase 4B: Out-of-order event detection fixtures.
 Phase 4C: Duplicate and missing event detection fixtures.
+Phase 4D: Timeline gap and timing anomaly detection fixtures.
 """
 
 from ..database import (
@@ -289,6 +290,162 @@ async def load_scenario_g():
     )
 
 
+async def load_scenario_h():
+    """
+    SCENARIO H: Extremely long authorization delay
+
+    Timeline:
+    1. Payment initiated at 15:00:00Z
+    2. Payment authorized at 15:02:00Z (120 seconds later - exceeds 90s threshold)
+    3. Payment captured at 15:02:05Z
+
+    This demonstrates:
+    - Unusually long initiated → authorized gap (120s > 90s threshold)
+    - Valid payment state machine (no INCONSISTENCY)
+    - Normal authorized → captured gap (5s)
+    - Timing anomaly detection (Phase 4D)
+
+    Expected detection:
+    - UNKNOWN evidence: Unusually long gap between initiated and authorized
+    - No state machine violations (Phase 4A)
+    - No out-of-order violations (Phase 4B)
+    - No duplicate/missing violations (Phase 4C)
+
+    Note: This is still a VALID payment flow, just with suspicious timing.
+    """
+    order_id = "order_scenario_h"
+    payment_id = "pay_h_longdelay"
+
+    # Create order
+    await insert_order(
+        order_id=order_id,
+        created_at="2026-09-05T15:00:00Z",
+        amount=150000,  # 1500.00 in smallest currency unit
+        currency="INR",
+        merchant_status="paid"
+    )
+
+    # Single payment attempt
+    await insert_payment_attempt(
+        attempt_id="attempt_h_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        method="card",
+        attempt_number=1,
+        status="captured",
+        created_at="2026-09-05T15:00:00Z"
+    )
+
+    # Event 1: Payment initiated
+    await insert_payment_event(
+        event_id="event_h_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.initiated",
+        status="created",
+        timestamp="2026-09-05T15:00:00Z"
+    )
+
+    # Event 2: Payment authorized (120 seconds after initiated)
+    await insert_payment_event(
+        event_id="event_h_2",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.authorized",
+        status="authorized",
+        timestamp="2026-09-05T15:02:00Z"
+    )
+
+    # Event 3: Payment captured (5 seconds after authorized)
+    await insert_payment_event(
+        event_id="event_h_3",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.captured",
+        status="captured",
+        timestamp="2026-09-05T15:02:05Z"
+    )
+
+
+async def load_scenario_i():
+    """
+    SCENARIO I: Suspiciously fast event sequence (near-zero gaps)
+
+    Timeline:
+    1. Payment initiated at 15:10:00.000Z
+    2. Payment authorized at 15:10:00.020Z (20 milliseconds later)
+    3. Payment captured at 15:10:00.040Z (20 milliseconds later)
+
+    This demonstrates:
+    - Near-zero gaps (< 50ms threshold)
+    - Millisecond timestamp precision
+    - Valid payment state machine (no INCONSISTENCY)
+    - Timing anomaly detection (Phase 4D)
+
+    Expected detection:
+    - UNKNOWN evidence: Near-zero gap between initiated and authorized
+    - UNKNOWN evidence: Near-zero gap between authorized and captured
+    - No state machine violations (Phase 4A)
+    - No out-of-order violations (Phase 4B)
+    - No duplicate/missing violations (Phase 4C)
+
+    Note: This may indicate timestamp precision issues or synchronization behavior,
+    not necessarily a payment problem.
+    """
+    order_id = "order_scenario_i"
+    payment_id = "pay_i_nearzero"
+
+    # Create order
+    await insert_order(
+        order_id=order_id,
+        created_at="2026-09-05T15:10:00Z",
+        amount=200000,  # 2000.00 in smallest currency unit
+        currency="INR",
+        merchant_status="paid"
+    )
+
+    # Single payment attempt
+    await insert_payment_attempt(
+        attempt_id="attempt_i_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        method="upi",
+        attempt_number=1,
+        status="captured",
+        created_at="2026-09-05T15:10:00Z"
+    )
+
+    # Event 1: Payment initiated (with millisecond precision)
+    await insert_payment_event(
+        event_id="event_i_1",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.initiated",
+        status="created",
+        timestamp="2026-09-05T15:10:00.000Z"
+    )
+
+    # Event 2: Payment authorized (20ms after initiated)
+    await insert_payment_event(
+        event_id="event_i_2",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.authorized",
+        status="authorized",
+        timestamp="2026-09-05T15:10:00.020Z"
+    )
+
+    # Event 3: Payment captured (20ms after authorized)
+    await insert_payment_event(
+        event_id="event_i_3",
+        order_id=order_id,
+        payment_id=payment_id,
+        event_type="payment.captured",
+        status="captured",
+        timestamp="2026-09-05T15:10:00.040Z"
+    )
+
+
 async def load_advanced_scenarios():
     """
     Load all advanced scenario fixtures.
@@ -297,3 +454,5 @@ async def load_advanced_scenarios():
     await load_scenario_e()
     await load_scenario_f()
     await load_scenario_g()
+    await load_scenario_h()
+    await load_scenario_i()

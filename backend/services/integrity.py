@@ -7,11 +7,25 @@ clearly invalid payment lifecycle transitions.
 Phase 4A: State Machine Validation
 Phase 4B: Out-of-Order Event Detection
 Phase 4C: Duplicate and Missing Event Detection
+Phase 4D: Timeline Gap / Timing Anomaly Detection
 """
 
 from typing import List, Dict, Set, Optional
 from datetime import datetime
 from ..models import PaymentEvent, PaymentAttempt, Evidence
+
+
+# ============================================================================
+# Phase 4D: Timeline Gap Detection Thresholds
+# ============================================================================
+# These are conservative informational thresholds designed to identify
+# suspicious timing patterns without generating false positives.
+# All Phase 4D findings are classified as UNKNOWN (not INCONSISTENCY)
+# because timing anomalies do not necessarily indicate payment failure.
+
+THRESHOLD_INIT_TO_AUTH_SECONDS = 90  # Scenario B has valid 45s gap
+THRESHOLD_AUTH_TO_CAPTURE_SECONDS = 45  # Most captures happen within 10s
+THRESHOLD_NEAR_ZERO_MS = 50  # Sub-50ms may indicate timestamp precision issues
 
 
 def validate_state_transitions(events: List[PaymentEvent],
@@ -541,3 +555,181 @@ def _detect_missing_events_for_payment(payment_id: str,
         ))
 
     return findings
+
+
+# ============================================================================
+# Phase 4D: Timeline Gap / Timing Anomaly Detection
+# ============================================================================
+
+def detect_timeline_gaps(events: List[PaymentEvent],
+                        attempts: List[PaymentAttempt]) -> List[Evidence]:
+    """
+    Detect suspicious timeline gaps and timing anomalies in payment lifecycle.
+
+    Phase 4D: Timeline Gap Detection
+
+    This function identifies unusually long or suspiciously short gaps between
+    payment lifecycle events. All findings are classified as UNKNOWN because
+    timing anomalies do not necessarily indicate payment failure.
+
+    Detection rules:
+    1. Initiated → Authorized > 90 seconds: May indicate authorization delays
+    2. Authorized → Captured > 45 seconds: May indicate processing delays
+    3. Consecutive lifecycle events < 50ms: May indicate timestamp precision issues
+
+    Webhooks (webhook.received) are excluded from timing analysis.
+
+    Args:
+        events: List of payment events (already sorted by timestamp)
+        attempts: List of payment attempts (included for consistency with Phase 4 API)
+
+    Returns:
+        List of Evidence items with category UNKNOWN for timing anomalies
+    """
+    findings = []
+
+    if not events:
+        return findings
+
+    # Group events by payment_id
+    events_by_payment: Dict[str, List[PaymentEvent]] = {}
+    for event in events:
+        if event.payment_id:
+            if event.payment_id not in events_by_payment:
+                events_by_payment[event.payment_id] = []
+            events_by_payment[event.payment_id].append(event)
+
+    # Detect gaps for each payment_id
+    for payment_id, payment_events in events_by_payment.items():
+        payment_findings = _detect_gaps_for_payment(payment_id, payment_events)
+        findings.extend(payment_findings)
+
+    return findings
+
+
+def _detect_gaps_for_payment(payment_id: str,
+                             events: List[PaymentEvent]) -> List[Evidence]:
+    """
+    Detect timing anomalies for a single payment_id.
+
+    Args:
+        payment_id: Payment identifier
+        events: List of events for this payment (already sorted by timestamp)
+
+    Returns:
+        List of Evidence items for timing anomalies
+    """
+    findings = []
+
+    # Extract lifecycle events (exclude webhooks)
+    lifecycle_events = []
+    for event in events:
+        if event.event_type in ['payment.initiated', 'payment.authorized',
+                               'payment.captured', 'payment.failed']:
+            lifecycle_events.append(event)
+
+    if not lifecycle_events:
+        return findings
+
+    # Track first occurrence of each lifecycle event type
+    initiated_event: Optional[PaymentEvent] = None
+    authorized_event: Optional[PaymentEvent] = None
+    captured_event: Optional[PaymentEvent] = None
+    failed_event: Optional[PaymentEvent] = None
+
+    for event in lifecycle_events:
+        event_type = event.event_type
+        status = event.status
+
+        if event_type == "payment.initiated" and status == "created" and not initiated_event:
+            initiated_event = event
+        elif event_type == "payment.authorized" and status == "authorized" and not authorized_event:
+            authorized_event = event
+        elif event_type == "payment.captured" and status == "captured" and not captured_event:
+            captured_event = event
+        elif event_type == "payment.failed" and status == "failed" and not failed_event:
+            failed_event = event
+
+    # Rule 1: Initiated → Authorized gap > 90 seconds
+    if initiated_event and authorized_event:
+        gap_seconds = _calculate_gap_seconds(initiated_event.timestamp, authorized_event.timestamp)
+        if gap_seconds > THRESHOLD_INIT_TO_AUTH_SECONDS:
+            findings.append(Evidence(
+                category="UNKNOWN",
+                statement=f"Payment {payment_id}: Unusually long gap ({gap_seconds:.1f}s) detected "
+                         f"between payment.initiated (at {initiated_event.timestamp}) and "
+                         f"payment.authorized (at {authorized_event.timestamp}). This may indicate "
+                         f"an authorization delay, but does not necessarily indicate a payment failure.",
+                source="timeline_gap_detection: initiated_to_authorized"
+            ))
+
+    # Rule 2: Authorized → Captured gap > 45 seconds
+    if authorized_event and captured_event:
+        gap_seconds = _calculate_gap_seconds(authorized_event.timestamp, captured_event.timestamp)
+        if gap_seconds > THRESHOLD_AUTH_TO_CAPTURE_SECONDS:
+            findings.append(Evidence(
+                category="UNKNOWN",
+                statement=f"Payment {payment_id}: Unusually long gap ({gap_seconds:.1f}s) detected "
+                         f"between payment.authorized (at {authorized_event.timestamp}) and "
+                         f"payment.captured (at {captured_event.timestamp}). This may indicate "
+                         f"a processing or capture delay, but does not necessarily indicate a payment failure.",
+                source="timeline_gap_detection: authorized_to_captured"
+            ))
+
+    # Rule 3: Near-zero gaps (< 50ms) between consecutive lifecycle events
+    for i in range(1, len(lifecycle_events)):
+        prev_event = lifecycle_events[i - 1]
+        curr_event = lifecycle_events[i]
+
+        gap_ms = _calculate_gap_milliseconds(prev_event.timestamp, curr_event.timestamp)
+
+        # Only flag positive gaps less than 50ms (avoid negative gaps from out-of-order events)
+        if 0 < gap_ms < THRESHOLD_NEAR_ZERO_MS:
+            findings.append(Evidence(
+                category="UNKNOWN",
+                statement=f"Payment {payment_id}: Near-zero gap ({gap_ms:.1f}ms) detected "
+                         f"between {prev_event.event_type} and {curr_event.event_type}. "
+                         f"This may indicate timestamp precision or synchronization behavior "
+                         f"and does not necessarily indicate a payment issue.",
+                source="timeline_gap_detection: near_zero_gap"
+            ))
+
+    return findings
+
+
+def _calculate_gap_seconds(ts1: str, ts2: str) -> float:
+    """
+    Calculate gap in seconds between two timestamps.
+
+    Args:
+        ts1: First timestamp (ISO format)
+        ts2: Second timestamp (ISO format)
+
+    Returns:
+        Gap in seconds (positive if ts2 > ts1)
+    """
+    try:
+        dt1 = datetime.fromisoformat(ts1.replace('Z', '+00:00'))
+        dt2 = datetime.fromisoformat(ts2.replace('Z', '+00:00'))
+        return (dt2 - dt1).total_seconds()
+    except Exception:
+        return 0.0
+
+
+def _calculate_gap_milliseconds(ts1: str, ts2: str) -> float:
+    """
+    Calculate gap in milliseconds between two timestamps.
+
+    Args:
+        ts1: First timestamp (ISO format)
+        ts2: Second timestamp (ISO format)
+
+    Returns:
+        Gap in milliseconds (positive if ts2 > ts1)
+    """
+    try:
+        dt1 = datetime.fromisoformat(ts1.replace('Z', '+00:00'))
+        dt2 = datetime.fromisoformat(ts2.replace('Z', '+00:00'))
+        return (dt2 - dt1).total_seconds() * 1000
+    except Exception:
+        return 0.0

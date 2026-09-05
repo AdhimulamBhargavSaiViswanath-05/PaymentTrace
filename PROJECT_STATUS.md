@@ -1,11 +1,11 @@
 # PaymentTrace - Project Status
 
-## Current Phase: Phase 2 - LLM Diagnostic Integration ✅
+## Current Phase: Phase 3 - Functional Frontend ✅
 
 **Status:** COMPLETE
 
 **Current Branch:** `feature/phase2-llm-integration`  
-**Current Commit:** `418e790`  
+**Current Commit:** `f845b8e`  
 **Tests Passing:** 34/34
 
 ## Phase Breakdown
@@ -46,14 +46,26 @@
 - [x] Phase 1 backward compatibility verified
 - [x] Total test suite: 34 tests passing
 
-### ⏳ Phase 3: Frontend Interface (NOT STARTED - NEXT)
-- [ ] Order ID search interface
-- [ ] Journey timeline visualization
-- [ ] Evidence categorization display
-- [ ] Diagnosis explanation rendering
-- [ ] Error state handling (404, 503)
+### ✅ Phase 3: Functional Frontend (Complete)
+- [x] Order ID search interface with input validation
+- [x] Quick-select buttons for fixture scenarios
+- [x] Real-time API integration (GET /journeys/{order_id}/diagnosis)
+- [x] Loading states with progressive messages
+- [x] Order summary display (amount, status, attempts, retries, duration)
+- [x] Payment timeline visualization (chronological, color-coded by status)
+- [x] Payment attempts display with retry highlighting
+- [x] Evidence panel with 4-category tabs (PROVEN/DERIVED/INCONSISTENCY/UNKNOWN)
+- [x] Evidence items display with statements and sources
+- [x] AI diagnosis rendering (summary, what happened, known/unknown, action)
+- [x] Dynamic LLM model display from API response
+- [x] Comprehensive error handling (404, 503, 500, network, empty input)
+- [x] Responsive design (mobile/tablet/desktop breakpoints)
+- [x] Professional developer-tool styling
+- [x] No hardcoded diagnosis data (all from API)
+- [x] No frontend business logic duplication
+- [x] Frontend files: index.html, styles.css (~780 lines), app.js (~545 lines)
 
-### ⏳ Phase 4: Advanced Journey Analysis (NOT STARTED)
+### ⏳ Phase 4: Advanced Journey Analysis (NOT STARTED - NEXT)
 - [ ] Complex state machine analysis
 - [ ] Timeline gap detection
 - [ ] Additional inconsistency patterns
@@ -64,6 +76,275 @@
 - [ ] Rate limiting
 - [ ] Monitoring and logging
 - [ ] Deployment configuration
+
+## Phase 3 Implementation Summary
+
+### Overview
+
+Phase 3 transforms PaymentTrace from a backend-only API into a complete diagnostic tool with a functional web interface. The frontend consumes the existing Phase 2 diagnosis endpoint and provides visual investigation capabilities while preserving all architectural boundaries.
+
+### Architecture
+
+Phase 3 extends the existing architecture with a frontend display layer:
+
+```
+DETERMINISTIC RECONSTRUCTION (Phase 1 - Backend)
+         ↓
+EVIDENCE CLASSIFICATION (Phase 1 - Backend)
+         ↓
+STRUCTURED EVIDENCE PAYLOAD (Phase 1 - Backend)
+         ↓
+GEMINI LLM (Phase 2 - Backend)
+         ↓
+STRUCTURED JSON DIAGNOSIS (Phase 2 - Backend)
+         ↓
+FRONTEND DISPLAY (Phase 3 - Frontend)
+```
+
+**Critical Constraint:** The frontend does **NOT** calculate payment facts, classify evidence, or generate diagnoses. It **ONLY** displays API response data with visual formatting.
+
+### Frontend Implementation
+
+**Technology Stack:**
+- HTML5 (semantic structure)
+- CSS3 (responsive design, ~780 lines)
+- Vanilla JavaScript (API integration, ~545 lines)
+- Fetch API (no external dependencies)
+
+**File Structure:**
+```
+frontend/
+  index.html    (134 lines) - Semantic HTML structure
+  styles.css    (778 lines) - Professional styling, responsive
+  app.js        (543 lines) - API integration & rendering
+```
+
+**Total Frontend Code: ~1,455 lines**
+
+### User Flow
+
+1. User enters order ID (or clicks quick-select scenario button)
+2. Frontend validates input (empty check)
+3. JavaScript calls `GET /journeys/{order_id}/diagnosis`
+4. Loading state displays with progressive messages:
+   - "Reconstructing payment journey..."
+   - "Generating evidence-grounded diagnosis..."
+5. On success: Render complete diagnostic interface
+6. On error: Display appropriate error message with retry option
+
+### UI Components
+
+**1. Header**
+- PaymentTrace branding
+- Tagline: "Payment Journey Reconstruction & Evidence-Grounded Diagnosis"
+- Phase 3 badge
+
+**2. Search Section**
+- Order ID input field with validation
+- "Diagnose Journey" button
+- Quick-select buttons: Scenario A, Scenario B
+- Enter key support
+
+**3. Loading States**
+- Animated spinner
+- Progressive status messages
+- Button disabled during API call
+
+**4. Error Handling**
+- 404: "Order Not Found" with suggestions
+- 503: "Diagnostic Service Unavailable" (LLM config issue)
+- 500: "Diagnosis Generation Failed"
+- Network error: "API Unavailable" with /health suggestion
+- Empty input: Validation message
+
+**5. Order Summary**
+- Grid layout (responsive)
+- Order ID, Amount (formatted), Currency
+- Merchant Status (color-coded)
+- Final Payment Status (color-coded)
+- Attempts, Retries, Duration (formatted), Events
+
+**6. Payment Timeline**
+- Vertical timeline with connecting line
+- Chronological order preserved from backend
+- Color-coded status markers (success/failed/pending/created)
+- Event type, timestamp (formatted), status, payment ID
+- Error codes and metadata display
+- Visual hierarchy for readability
+
+**7. Payment Attempts**
+- Attempt cards with attempt number
+- Status badges (color-coded: captured/failed)
+- Retry attempts visually highlighted
+- Payment ID, method (uppercase), timestamp
+- Grid layout for attempt details
+
+**8. Evidence Panel**
+- Tab navigation: PROVEN / DERIVED / INCONSISTENCY / UNKNOWN
+- Evidence items grouped by category
+- Each item shows:
+  - Statement (from API)
+  - Source (from API)
+  - Category-specific color coding
+- Empty state handling per category
+- Backend classification preserved exactly
+
+**9. AI Diagnosis**
+- Dedicated card with gradient background
+- Meta badges:
+  - "Evidence-Grounded Diagnosis"
+  - Model name (dynamic from API: `llm_model`)
+- Structured sections:
+  - Summary
+  - What Happened (chronological narrative)
+  - What Is Known (bulleted list)
+  - What Cannot Be Determined (bulleted list)
+  - Recommended Action
+- All content from API response
+
+### Data Integration
+
+**API Endpoint:** `GET /journeys/{order_id}/diagnosis`
+
+**Data Flow:**
+```javascript
+// API call
+fetch(`http://localhost:8000/journeys/${orderId}/diagnosis`)
+  → Parse JSON response
+  → Render order summary (data.journey.order)
+  → Render timeline (data.journey.events)
+  → Render attempts (data.journey.attempts)
+  → Render evidence (data.journey.evidence)
+  → Render diagnosis (data.diagnosis)
+  → Display model name (data.llm_model)
+```
+
+**Frontend does NOT:**
+- Calculate attempt counts, retry gaps, or durations
+- Classify evidence into categories
+- Reorder events
+- Determine payment status
+- Generate diagnoses
+- Call Gemini directly
+
+**All facts come from backend API response.**
+
+### Responsive Design
+
+**Breakpoints:**
+- Mobile: < 768px (vertical layout, stacked components)
+- Tablet: 768px - 1199px (adaptive grid)
+- Desktop: ≥ 1200px (full layout, max-width container)
+
+**Mobile Optimizations:**
+- Search form stacks vertically
+- Timeline readable on small screens
+- Evidence tabs scroll horizontally
+- Cards adapt to narrow width
+- Touch-friendly button sizes
+
+### Visual Design
+
+**Design Philosophy:**
+- Professional fintech/developer tool aesthetic
+- Technical credibility emphasized
+- Clean, hierarchical information architecture
+
+**Color Coding:**
+- Success: Green (#10b981)
+- Failed: Red (#ef4444)
+- Pending: Yellow (#f59e0b)
+- Created: Indigo (#6366f1)
+
+**Evidence Categories:**
+- PROVEN: Green border
+- DERIVED: Blue border
+- INCONSISTENCY: Red border
+- UNKNOWN: Yellow border
+
+**Typography:**
+- Monospace font for technical data (order IDs, timestamps, codes)
+- Sans-serif for readable text
+- Clear hierarchy with font sizes
+
+**Layout:**
+- Card-based sections
+- Subtle shadows and borders
+- Consistent spacing
+- No excessive animations or gradients
+
+### Error Handling
+
+**Comprehensive coverage:**
+
+1. **404 - Order Not Found:**
+   - Error title, message
+   - Suggestion: "Available test orders: order_scenario_a, order_scenario_b"
+   - Retry button
+
+2. **503 - Service Unavailable:**
+   - Detects LLM configuration issue
+   - Message: "LLM service not configured"
+   - Note about GEMINI_API_KEY
+
+3. **500 - Diagnosis Failed:**
+   - Error message from API
+   - Suggestion to check backend logs
+
+4. **Network Failure:**
+   - Detects fetch errors
+   - Message: "Unable to connect to backend"
+   - Suggestion to check /health endpoint
+
+5. **Empty Order ID:**
+   - Client-side validation
+   - No API call made
+   - Clear error message
+
+### Files Modified (Phase 3)
+
+**Created:**
+- `frontend/app.js` (+543 lines)
+- `frontend/styles.css` (+778 lines)
+
+**Modified:**
+- `frontend/index.html` (replaced Phase 0 placeholder, net +39 lines)
+
+**Unchanged (Backend Integrity Preserved):**
+- `backend/services/reconstruction.py` (no changes)
+- `backend/services/evidence.py` (no changes)
+- `backend/services/llm.py` (no changes)
+- `backend/main.py` (no changes)
+- `backend/models.py` (no changes)
+- All test files (no changes)
+
+**Phase 1 and Phase 2 remain completely untouched.**
+
+### Test Coverage
+
+**Phase 3 Testing:**
+- Frontend uses mocked API responses during development
+- Backend tests remain unchanged: 34/34 passing
+- No new backend tests required (frontend only)
+
+**Manual Testing Required:**
+- UI functionality (order search, display, errors)
+- Responsive design (mobile/tablet/desktop)
+- Cross-browser compatibility
+- API integration with real backend
+
+### Phase 3 Achievements
+
+✅ **Complete functional frontend without backend modifications**  
+✅ **Real-time API integration (no hardcoded data)**  
+✅ **Evidence classification preserved from backend**  
+✅ **Timeline chronology maintained from backend**  
+✅ **Professional developer-tool UX**  
+✅ **Comprehensive error handling**  
+✅ **Responsive across devices**  
+✅ **No frontend business logic duplication**  
+✅ **Architectural boundaries respected**  
+✅ **All 34 backend tests still passing**
 
 ## Phase 2 Implementation Summary
 
@@ -377,16 +658,13 @@ class DiagnosisSchema(BaseModel):
 
 ## What Does NOT Exist Yet
 
-❌ No functional frontend interface (current UI is Phase 0 placeholder)  
-❌ No frontend timeline visualization  
-❌ No frontend evidence display  
-❌ No frontend diagnosis rendering  
-❌ No production database  
-❌ No real Razorpay production data  
+❌ No production database configuration  
+❌ No real Razorpay production data integration  
 ❌ No real-time event ingestion  
 ❌ No authentication or authorization  
 ❌ No monitoring or logging system  
-❌ No deployment configuration
+❌ No deployment configuration  
+❌ No advanced journey analysis features
 
 ## Critical Design Principles Maintained
 
@@ -423,20 +701,33 @@ class DiagnosisSchema(BaseModel):
 - **Testing:** Mocked LLM responses, no real API calls in tests
 - **Configuration:** Environment variable (GEMINI_API_KEY via .env file)
 
+### Phase 3 Decisions
+- **Technology:** Vanilla JavaScript (no framework) for simplicity
+- **Styling:** Custom CSS (~780 lines) for full control
+- **Architecture:** Frontend as pure display layer, no business logic
+- **API Integration:** Fetch API with comprehensive error handling
+- **Design:** Professional developer-tool aesthetic, not consumer-facing
+- **Responsive:** Mobile-first approach with 768px breakpoint
+- **Testing:** Manual UI testing, backend tests unchanged
+
 ## Next Steps
 
-**Phase 3 (Recommended Next - NOT STARTED):**
-- Minimal functional frontend for PaymentTrace
-- Single-page application (vanilla JS, no framework)
-- Order ID input and "Diagnose" button
-- Journey timeline visualization
-- Evidence display by category
-- Diagnosis explanation rendering
-- Error handling (404, 503)
+**Phase 4 (Recommended Next - NOT STARTED):**
+- Advanced journey analysis
+- Complex state machine patterns
+- Timeline gap detection algorithms
+- Payment method-specific rules
+- Enhanced inconsistency detection
+- Pattern recognition for common failure modes
 
-**Phase 4 Options (Future):**
-- Advanced journey analysis (complex state patterns)
-- Additional inconsistency detection rules
+**Phase 5 (Future - NOT STARTED):**
+**Phase 5 (Future - NOT STARTED):**
+- Production database configuration
+- API authentication and authorization
+- Rate limiting
+- Monitoring and logging infrastructure
+- Deployment configuration
+- Performance optimization
 - Timeline gap analysis
 - Payment method-specific rules
 
@@ -445,4 +736,4 @@ class DiagnosisSchema(BaseModel):
 **Last Updated:** September 5, 2026  
 **Version:** 0.3.0  
 **Current Branch:** `feature/phase2-llm-integration`  
-**Current Commit:** `418e790`
+**Current Commit:** `f845b8e`

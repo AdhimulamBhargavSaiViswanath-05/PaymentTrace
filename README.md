@@ -87,7 +87,7 @@ PaymentTrace is **NOT**:
 
 ## Architecture
 
-PaymentTrace uses a layered architecture where the deterministic reconstruction engine is the source of truth, and the LLM serves only as a language synthesis layer:
+PaymentTrace uses a layered architecture where the deterministic reconstruction engine is the source of truth, the LLM serves as a language synthesis layer, and the frontend provides visual investigation capabilities:
 
 ```
 DETERMINISTIC RECONSTRUCTION (Phase 1)
@@ -101,18 +101,18 @@ GEMINI LLM (Phase 2)
          ↓
 STRUCTURED JSON DIAGNOSIS
          ↓
-NATURAL LANGUAGE EXPLANATION
+FRONTEND DISPLAY (Phase 3)
 ```
 
 ### System Components
 
 ```
 ┌─────────────────┐
-│   Frontend      │  Static HTML interface (Phase 0 placeholder)
-│   (Minimal)     │  Order ID input + results display
+│   Frontend      │  Functional web interface (Phase 3)
+│   (Phase 3)     │  Order search, timeline, evidence, diagnosis
 └────────┬────────┘
          │
-         │ HTTP/REST
+         │ HTTP/REST (Fetch API)
          ↓
 ┌─────────────────┐
 │   FastAPI       │  Phase 1: /journeys/{order_id}
@@ -193,11 +193,30 @@ All facts are established by the deterministic Phase 1 reconstruction engine.
    ```bash
    python -m uvicorn backend.main:app --reload
    ```
+   
+   The backend will start at `http://localhost:8000`
 
-6. **Access API:**
-   - Health check: http://localhost:8000/health
+6. **Open frontend:**
+   
+   Open `frontend/index.html` in your web browser (Chrome/Firefox/Safari):
+   
+   ```bash
+   # macOS
+   open frontend/index.html
+   
+   # Linux
+   xdg-open frontend/index.html
+   
+   # Windows
+   start frontend/index.html
+   ```
+   
+   Or navigate directly: `file:///path/to/PaymentTrace/frontend/index.html`
+
+7. **Verify installation:**
+   - Backend health: http://localhost:8000/health
    - API docs: http://localhost:8000/docs
-   - Frontend: Open `frontend/index.html` in browser (Phase 0 placeholder)
+   - Frontend: Use the web interface to diagnose `order_scenario_a`
 
 ### Verify Installation
 
@@ -218,7 +237,7 @@ Expected response:
 
 ## Project Status
 
-**Current Phase:** Phase 2 - LLM Diagnostic Integration ✅ **COMPLETE**
+**Current Phase:** Phase 3 - Functional Frontend ✅ **COMPLETE**
 
 See [PROJECT_STATUS.md](PROJECT_STATUS.md) for detailed phase breakdown.
 
@@ -241,13 +260,26 @@ See [PROJECT_STATUS.md](PROJECT_STATUS.md) for detailed phase breakdown.
 ✅ Graceful error handling for missing API keys and malformed responses  
 ✅ 34/34 tests passing (all LLM calls mocked in tests)  
 
+**Phase 3 - Functional Frontend:**
+✅ Order ID search interface with quick-select buttons  
+✅ Real-time diagnosis API integration (no hardcoded data)  
+✅ Order summary display (amount, status, attempts, retries, duration)  
+✅ Payment timeline visualization (chronological, color-coded events)  
+✅ Payment attempts display with retry highlighting  
+✅ Evidence panel with 4-category tabs (PROVEN/DERIVED/INCONSISTENCY/UNKNOWN)  
+✅ Structured AI diagnosis rendering (summary, timeline, known/unknown facts)  
+✅ Comprehensive error handling (404, 503, 500, network failures)  
+✅ Loading states with progress indicators  
+✅ Responsive design (mobile/tablet/desktop)  
+✅ Professional developer-tool styling  
+
 ### What Doesn't Exist Yet
-❌ Functional frontend interface (current UI is Phase 0 placeholder)  
 ❌ Production database configuration  
 ❌ Real-time event ingestion  
 ❌ Authentication or authorization  
 ❌ Monitoring and logging  
-❌ Deployment configuration
+❌ Deployment configuration  
+❌ Advanced journey analysis features
 
 ## API Endpoints
 
@@ -337,7 +369,9 @@ backend/
     data.py                 # Test scenarios
 
 frontend/
-  index.html                # Phase 0 placeholder
+  index.html                # Phase 3: Main UI structure
+  styles.css                # Phase 3: Professional styling (~780 lines)
+  app.js                    # Phase 3: API integration & rendering (~545 lines)
 
 tests/
   test_reconstruction.py    # Phase 1 tests
@@ -374,7 +408,7 @@ PaymentTrace is **NOT**:
 
 **Known Limitations:**
 - Fixture data only (no real Razorpay production data)
-- Frontend is Phase 0 placeholder (not functional)
+- Frontend serves static files (not a production web server)
 - Diagnosis endpoint depends on external Gemini API availability
 - No authentication, rate limiting, or production safeguards
 - SQLite database (not suitable for production scale)
@@ -385,7 +419,8 @@ This is an MVP under active development. Current implementation status:
 - ✅ Phase 0: Project Setup
 - ✅ Phase 1: Deterministic Reconstruction
 - ✅ Phase 2: LLM Diagnostic Integration
-- ⏳ Phase 3: Frontend Interface (next)
+- ✅ Phase 3: Functional Frontend
+- ⏳ Phase 4: Advanced Journey Analysis (next)
 
 ## License
 
@@ -396,4 +431,4 @@ See [LICENSE](LICENSE) file.
 **Version:** 0.3.0  
 **Last Updated:** September 5, 2026  
 **Current Branch:** `feature/phase2-llm-integration`  
-**Current Commit:** `418e790`
+**Current Commit:** `f845b8e`

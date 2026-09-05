@@ -11,6 +11,7 @@ from ..database import (
     insert_payment_attempt,
     insert_payment_event
 )
+from .advanced_scenarios import load_advanced_scenarios
 
 
 async def load_fixtures():
@@ -21,6 +22,7 @@ async def load_fixtures():
     await clear_database()
     await load_scenario_a()
     await load_scenario_b()
+    await load_advanced_scenarios()  # Phase 4A fixtures
 
 
 async def load_scenario_a():

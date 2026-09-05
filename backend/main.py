@@ -58,7 +58,7 @@ async def health_check():
     Returns:
         dict: Status and version information
     """
-    llm_configured = bool(os.getenv("OPENAI_API_KEY"))
+    llm_configured = bool(os.getenv("GEMINI_API_KEY"))
     
     return {
         "status": "healthy",
@@ -158,10 +158,10 @@ async def get_payment_diagnosis(order_id: str):
         )
     
     # Step 2: Check LLM configuration
-    if not os.getenv("OPENAI_API_KEY"):
+    if not os.getenv("GEMINI_API_KEY"):
         raise HTTPException(
             status_code=503,
-            detail="LLM service not configured. Set OPENAI_API_KEY environment variable."
+            detail="LLM service not configured. Set GEMINI_API_KEY environment variable."
         )
     
     # Step 3: Generate diagnosis from structured evidence
@@ -175,7 +175,7 @@ async def get_payment_diagnosis(order_id: str):
             order_id=order_id,
             journey=journey,
             diagnosis=diagnosis,
-            llm_model="gpt-4o-mini",
+            llm_model="gemini-3.7-flash",
             evidence_based=True  # Always true - diagnosis based only on evidence
         )
         

@@ -3,6 +3,7 @@ Tests for diagnosis API endpoint.
 """
 
 import pytest
+import json
 from unittest.mock import patch, AsyncMock
 from httpx import AsyncClient, ASGITransport
 from backend.main import app
@@ -10,7 +11,7 @@ from backend.database import initialize_database
 from backend.fixtures.data import load_fixtures
 
 
-# Mock LLM response
+# Mock LLM response (structured diagnosis dict, not JSON string)
 MOCK_DIAGNOSIS = {
     "summary": "UPI payment succeeded after retry",
     "what_happened": "Payment failed initially, then succeeded on retry",
@@ -23,7 +24,13 @@ MOCK_DIAGNOSIS = {
         "Specific reason for initial failure"
     ],
     "recommended_action": "Review authentication patterns",
-    "raw_explanation": "Full explanation here"
+    "raw_explanation": json.dumps({
+        "summary": "UPI payment succeeded after retry",
+        "what_happened": "Payment failed initially, then succeeded on retry",
+        "what_is_known": ["Order amount was 50000 INR", "First attempt failed", "Second attempt succeeded"],
+        "what_cannot_be_determined": ["Specific reason for initial failure"],
+        "recommended_action": "Review authentication patterns"
+    })
 }
 
 
@@ -69,7 +76,7 @@ async def test_diagnosis_endpoint_with_mock_llm(client):
         mock_gen.return_value = MOCK_DIAGNOSIS
         
         # Mock environment variable
-        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test_key'}):
+        with patch.dict('os.environ', {'GEMINI_API_KEY': 'test_key'}):
             response = await client.get("/journeys/order_scenario_a/diagnosis")
             assert response.status_code == 200
             
@@ -119,7 +126,7 @@ async def test_diagnosis_endpoint_missing_api_key(client):
 @pytest.mark.asyncio
 async def test_diagnosis_endpoint_missing_order(client):
     """Test diagnosis endpoint returns 404 for missing order."""
-    with patch.dict('os.environ', {'OPENAI_API_KEY': 'test_key'}):
+    with patch.dict('os.environ', {'GEMINI_API_KEY': 'test_key'}):
         response = await client.get("/journeys/invalid_order_123/diagnosis")
         assert response.status_code == 404
         
@@ -135,7 +142,7 @@ async def test_diagnosis_uses_existing_phase1_reconstruction(client):
     with patch('backend.main.generate_diagnosis') as mock_gen:
         mock_gen.return_value = MOCK_DIAGNOSIS
         
-        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test_key'}):
+        with patch.dict('os.environ', {'GEMINI_API_KEY': 'test_key'}):
             response = await client.get("/journeys/order_scenario_a/diagnosis")
             assert response.status_code == 200
             
@@ -159,7 +166,7 @@ async def test_diagnosis_response_includes_both_journey_and_explanation(client):
     with patch('backend.main.generate_diagnosis') as mock_gen:
         mock_gen.return_value = MOCK_DIAGNOSIS
         
-        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test_key'}):
+        with patch.dict('os.environ', {'GEMINI_API_KEY': 'test_key'}):
             response = await client.get("/journeys/order_scenario_a/diagnosis")
             assert response.status_code == 200
             

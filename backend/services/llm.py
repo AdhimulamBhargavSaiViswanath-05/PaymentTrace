@@ -7,8 +7,11 @@ All facts are established by the deterministic reconstruction engine.
 """
 
 import os
+import json
 from typing import List, Optional
-from openai import AsyncOpenAI
+from google import genai
+from google.genai import types
+from pydantic import BaseModel, ValidationError
 from ..models import PaymentJourney, Evidence
 
 
@@ -36,14 +39,24 @@ EVIDENCE CATEGORIES:
 - INCONSISTENCY: Detected conflicts between data points
 - UNKNOWN: Gaps in available data where information is missing
 
-Your task: Generate a structured diagnostic explanation containing:
-1. Summary: Brief overview of what happened
-2. What Happened: Chronological explanation of the payment journey
-3. What Is Known: List of confirmed facts from evidence
-4. What Cannot Be Determined: List of unknowns or uncertainties
-5. Recommended Action: Suggested next steps for investigation (if applicable)
+Return your analysis as a structured JSON object with these exact fields:
+- summary: Brief overview of what happened
+- what_happened: Chronological explanation of the payment journey
+- what_is_known: Array of confirmed facts from evidence
+- what_cannot_be_determined: Array of unknowns or uncertainties
+- recommended_action: Suggested next steps for investigation (if applicable)
 
 Be factual, precise, and acknowledge limitations of the available data."""
+
+
+# Pydantic model for structured JSON response from Gemini
+class DiagnosisSchema(BaseModel):
+    """Schema for LLM-generated diagnostic explanation."""
+    summary: str
+    what_happened: str
+    what_is_known: List[str]
+    what_cannot_be_determined: List[str]
+    recommended_action: str
 
 
 def _build_evidence_payload(journey: PaymentJourney) -> str:
@@ -102,7 +115,7 @@ async def generate_diagnosis(
     
     Args:
         journey: Complete payment journey with pre-classified evidence
-        api_key: OpenAI API key (optional, defaults to environment variable)
+        api_key: Gemini API key (optional, defaults to environment variable)
         
     Returns:
         Dictionary containing:
@@ -118,93 +131,65 @@ async def generate_diagnosis(
     """
     # Get API key from parameter or environment
     if api_key is None:
-        api_key = os.getenv("OPENAI_API_KEY")
+        api_key = os.getenv("GEMINI_API_KEY")
     
     if not api_key:
         raise ValueError(
-            "OpenAI API key not configured. Set OPENAI_API_KEY environment variable "
+            "Gemini API key not configured. Set GEMINI_API_KEY environment variable "
             "or pass api_key parameter."
         )
     
-    # Initialize OpenAI client
-    client = AsyncOpenAI(api_key=api_key)
+    # Initialize Gemini client
+    client = genai.Client(api_key=api_key)
     
     # Build evidence payload
     evidence_payload = _build_evidence_payload(journey)
     
     try:
-        # Call LLM with strict system prompt
-        response = await client.chat.completions.create(
-            model="gpt-4o-mini",  # Cost-effective for MVP
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": evidence_payload}
-            ],
-            temperature=0.3,  # Low temperature for consistency
-            max_tokens=1000
+        # Call LLM with strict system prompt and structured JSON output
+        # Combine system prompt and user message for Gemini
+        full_prompt = f"{SYSTEM_PROMPT}\n\n{evidence_payload}"
+        
+        response = await client.aio.models.generate_content(
+            model="gemini-3.7-flash",  # Cost-effective workhorse model for MVP
+            contents=full_prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.3,  # Low temperature for consistency
+                max_output_tokens=2000,  # Increased for complete JSON response
+                response_mime_type="application/json",
+                response_schema=DiagnosisSchema
+            )
         )
         
-        # Extract response
-        explanation = response.choices[0].message.content
+        # Extract raw response for transparency
+        raw_response = response.text
         
-        # Parse structured response
-        # In production, use structured output or JSON mode
-        # For MVP, return as sections
-        diagnosis = {
-            "summary": _extract_section(explanation, "Summary", "What Happened"),
-            "what_happened": _extract_section(explanation, "What Happened", "What Is Known"),
-            "what_is_known": _extract_list(explanation, "What Is Known", "What Cannot Be Determined"),
-            "what_cannot_be_determined": _extract_list(explanation, "What Cannot Be Determined", "Recommended Action"),
-            "recommended_action": _extract_section(explanation, "Recommended Action", None),
-            "raw_explanation": explanation  # Include full response for transparency
-        }
-        
-        return diagnosis
+        # Parse and validate JSON response
+        try:
+            # Gemini returns JSON as a string, parse it
+            parsed_json = json.loads(raw_response)
+            
+            # Validate against schema
+            validated_diagnosis = DiagnosisSchema(**parsed_json)
+            
+            # Convert to dict and add raw response
+            diagnosis = validated_diagnosis.model_dump()
+            diagnosis["raw_explanation"] = raw_response  # Include full response for transparency
+            
+            return diagnosis
+            
+        except json.JSONDecodeError as e:
+            raise Exception(f"Failed to parse JSON response from Gemini: {str(e)}. Raw response: {raw_response[:200]}")
+        except ValidationError as e:
+            raise Exception(f"Gemini response validation failed: {str(e)}. Raw response: {raw_response[:200]}")
         
     except Exception as e:
+        # Re-raise with context if it's already our exception
+        if "Failed to parse JSON" in str(e) or "validation failed" in str(e):
+            raise
+        # Otherwise wrap it
         raise Exception(f"Failed to generate diagnosis: {str(e)}")
 
 
-def _extract_section(text: str, start_marker: str, end_marker: Optional[str]) -> str:
-    """Extract section between markers."""
-    try:
-        start_idx = text.find(start_marker)
-        if start_idx == -1:
-            return ""
-        
-        start_idx = text.find(":", start_idx) + 1
-        
-        if end_marker:
-            end_idx = text.find(end_marker, start_idx)
-            if end_idx == -1:
-                content = text[start_idx:]
-            else:
-                content = text[start_idx:end_idx]
-        else:
-            content = text[start_idx:]
-        
-        return content.strip()
-    except:
-        return ""
-
-
-def _extract_list(text: str, start_marker: str, end_marker: Optional[str]) -> List[str]:
-    """Extract bulleted list between markers."""
-    try:
-        section = _extract_section(text, start_marker, end_marker)
-        
-        # Split by lines and extract list items
-        lines = section.split('\n')
-        items = []
-        for line in lines:
-            line = line.strip()
-            # Remove bullet points/numbers
-            if line and (line.startswith('-') or line.startswith('•') or 
-                        (len(line) > 2 and line[0].isdigit() and line[1] == '.')):
-                item = line.lstrip('-•0123456789. ').strip()
-                if item:
-                    items.append(item)
-        
-        return items
-    except:
-        return []
+# Note: Removed _extract_section and _extract_list functions
+# Now using structured JSON output from Gemini instead of string parsing

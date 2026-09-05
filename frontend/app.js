@@ -37,10 +37,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
-    // Quick select buttons
-    document.querySelectorAll('.quick-select .btn-secondary').forEach(btn => {
+    // Scenario buttons (new grid layout)
+    document.querySelectorAll('.scenario-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
-            const orderId = e.target.dataset.orderId;
+            const button = e.currentTarget;
+            const orderId = button.dataset.orderId;
             orderIdInput.value = orderId;
             handleDiagnose();
         });
@@ -49,10 +50,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Evidence tabs
     document.querySelectorAll('.evidence-tab').forEach(tab => {
         tab.addEventListener('click', (e) => {
-            const category = e.target.dataset.category;
+            const category = e.target.closest('.evidence-tab').dataset.category;
             switchEvidenceTab(category);
         });
     });
+    
+    // Check backend status
+    checkBackendStatus();
 });
 
 // Main handler
@@ -71,13 +75,8 @@ async function handleDiagnose() {
     hideResults();
     
     try {
-        // Step 1: Reconstructing
-        updateLoadingMessage('Reconstructing payment journey...');
-        
-        // Step 2: Call API
+        // Call API
         const response = await fetch(`${API_BASE_URL}/journeys/${orderId}/diagnosis`);
-        
-        updateLoadingMessage('Generating evidence-grounded diagnosis...');
         
         if (!response.ok) {
             await handleErrorResponse(response);
@@ -107,6 +106,42 @@ async function handleDiagnose() {
                 'Please try again or check the console for details.'
             );
         }
+    }
+}
+
+// Check backend status
+async function checkBackendStatus() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/health`);
+        if (response.ok) {
+            updateStatusIndicator(true);
+        } else {
+            updateStatusIndicator(false);
+        }
+    } catch (error) {
+        updateStatusIndicator(false);
+    }
+}
+
+function updateStatusIndicator(connected) {
+    const indicator = document.getElementById('statusIndicator');
+    if (!indicator) return;
+    
+    const dot = indicator.querySelector('.status-dot');
+    const text = indicator.querySelector('.status-text');
+    
+    if (connected) {
+        dot.style.background = '#10b981';
+        text.textContent = 'Backend Connected';
+        indicator.style.background = 'rgba(16, 185, 129, 0.15)';
+        indicator.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+        text.style.color = '#10b981';
+    } else {
+        dot.style.background = '#ef4444';
+        text.textContent = 'Backend Offline';
+        indicator.style.background = 'rgba(239, 68, 68, 0.15)';
+        indicator.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+        text.style.color = '#ef4444';
     }
 }
 
@@ -380,7 +415,9 @@ function renderDiagnosis(data) {
     const { diagnosis, llm_model } = data;
     
     // Update model badge
-    document.getElementById('llmModel').textContent = `Model: ${llm_model || 'unknown'}`;
+    if (llm_model) {
+        document.getElementById('llmModel').textContent = llm_model;
+    }
     
     if (!diagnosis) {
         document.getElementById('diagnosisContent').innerHTML = '<p class="evidence-empty">No diagnosis available</p>';

@@ -117,8 +117,8 @@ async def test_evidence_payload_structure(setup_with_fixtures):
 @pytest.mark.asyncio
 async def test_evidence_payload_includes_all_categories(setup_with_fixtures):
     """Test that all evidence categories are included in payload."""
-    # Use scenario B which has inconsistencies
-    journey = await reconstruct_journey("order_scenario_b")
+    # Use scenario C which has Phase 4A inconsistencies (captured without authorized)
+    journey = await reconstruct_journey("order_scenario_c")
     assert journey is not None
     
     payload = _build_evidence_payload(journey)
@@ -130,8 +130,7 @@ async def test_evidence_payload_includes_all_categories(setup_with_fixtures):
     
     # Verify inconsistency is mentioned
     has_inconsistency = any(e.category == "INCONSISTENCY" for e in journey.evidence)
-    if has_inconsistency:
-        assert "INCONSISTENCIES" in payload
+    assert has_inconsistency, "Scenario C should have Phase 4A inconsistencies"
 
 
 @pytest.mark.asyncio

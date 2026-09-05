@@ -293,18 +293,18 @@ async def test_evidence_classification():
 
 @pytest.mark.asyncio
 async def test_inconsistency_detection():
-    """Test detection of state inconsistencies."""
+    """Test detection of state inconsistencies using Phase 4A violations."""
     await initialize_database()
     await load_fixtures()
     
-    journey = await reconstruct_journey("order_scenario_b")
+    # Scenario C has Phase 4A inconsistency (captured without authorized)
+    journey = await reconstruct_journey("order_scenario_c")
     
-    # Scenario B has an inconsistency (order status = created, payment status = captured)
     inconsistencies = [e for e in journey.evidence if e.category == "INCONSISTENCY"]
     
-    assert len(inconsistencies) > 0, "Scenario B should detect inconsistency"
+    assert len(inconsistencies) > 0, "Scenario C should detect Phase 4A state machine violations"
     
-    # Verify inconsistency mentions the conflict
+    # Verify inconsistency mentions state violation
     inconsistency_text = " ".join([e.statement for e in inconsistencies])
-    assert "created" in inconsistency_text.lower()
+    assert "captured" in inconsistency_text.lower() or "authorized" in inconsistency_text.lower()
     assert "captured" in inconsistency_text.lower()

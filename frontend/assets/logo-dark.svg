@@ -1,0 +1,17 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Timeline trace line (light version for dark backgrounds) -->
+  <path d="M8 24 L40 24" stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M12 16 L12 32" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" opacity="0.4"/>
+  <path d="M24 16 L24 32" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" opacity="0.4"/>
+  <path d="M36 16 L36 32" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" opacity="0.4"/>
+  
+  <!-- Payment nodes (lighter colors for dark bg) -->
+  <circle cx="12" cy="24" r="5" fill="#60a5fa" stroke="#1e293b" stroke-width="2"/>
+  <circle cx="24" cy="24" r="5" fill="#34d399" stroke="#1e293b" stroke-width="2"/>
+  <circle cx="36" cy="24" r="5" fill="#34d399" stroke="#1e293b" stroke-width="2"/>
+  
+  <!-- Checkpoint marks -->
+  <path d="M10 24 L11.5 25.5 L14 22.5" stroke="#1e293b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M22 24 L23.5 25.5 L26 22.5" stroke="#1e293b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M34 24 L35.5 25.5 L38 22.5" stroke="#1e293b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

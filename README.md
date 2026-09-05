@@ -1,304 +1,525 @@
-# PaymentTrace
-
-**Developer diagnostic tool for investigating payment journeys**
+<div align="center">
+  <img src="frontend/assets/logo.svg" alt="PaymentTrace Logo" width="120"/>
+  
+  # PaymentTrace
+  
+  ### Evidence-backed payment forensics
+  
+  **Reconstruct the journey. Trace the evidence. Explain what actually happened.**
+  
+  [![Tests](https://img.shields.io/badge/tests-76%20passed-success)](tests/)
+  [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
+  [![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-teal)](https://fastapi.tiangolo.com/)
+  [![Gemini](https://img.shields.io/badge/LLM-Gemini%203.7-purple)](https://ai.google.dev/)
+  
+</div>
 
 ---
 
-## Problem Statement
+## 👨‍💻 Project Author
 
-When payments fail or behave unexpectedly, developers and payment operations teams need to:
-1. Retrieve scattered payment/event records for a specific order
-2. Reconstruct the complete payment journey deterministically
-3. Identify what actually happened vs. what was expected
-4. Communicate findings clearly to stakeholders
+<div align="center">
 
-Current approaches often involve manual log analysis, educated guessing, and fragmented data sources. PaymentTrace provides a systematic, evidence-based diagnostic workflow.
+**Adhimulam Bhargav Sai Viswanath**
 
-## Primary User
+<img src="frontend/assets/VVIT_Logo.png" alt="VVIT Logo" width="80"/>
 
-**Developer / Payment Operations Investigator**
+B.Tech — Computer Science and Engineering (AI & ML)  
+Vasireddy Venkatadri Institute of Technology (VVIT)  
+Batch: 2023–2027
 
-Someone who needs to:
-- Debug a specific payment issue
-- Understand retry/fallback behavior
-- Identify inconsistencies in payment state
-- Generate clear explanations for support teams
+AI Engineer Intern @ Paytm
 
-## Secondary Beneficiary
+</div>
 
-**Support Personnel**
+PaymentTrace is an **independently developed student buildathon project** exploring evidence-backed payment journey reconstruction and deterministic diagnostic reasoning. This project is not officially sponsored, endorsed, or deployed by VVIT or Paytm.
 
-Who need to communicate diagnostic results to customers in clear, non-technical language.
+---
 
-## MVP Scope
+## The Problem: Fragmented Payment Debugging
 
-PaymentTrace MVP follows this flow:
+### Real-World Scenario: The D-Mart UPI Purchase
 
-```
-Order ID
-  ↓
-Retrieve available payment/event records
-  ↓
-Deterministically reconstruct payment journey
-  ↓
-Order events by timestamp
-  ↓
-Derive basic facts (attempts, retries, duration)
-  ↓
-Compare relevant states
-  ↓
-Classify evidence as:
-  • Proven (directly from logs)
-  • Derived (inferred from patterns)
-  • Inconsistency (conflicting data)
-  • Unknown (gaps in data)
-  ↓
-Send structured evidence to LLM
-  ↓
-Generate constrained natural-language explanation
-```
+Consider this illustrative example:
 
-### MVP Features
-- Order ID-based search
-- Event timeline reconstruction
-- Basic fact derivation (retry count, duration, etc.)
-- Evidence classification
-- LLM-based explanation generation
-- Simple web interface
+> A customer at D-Mart purchases ₹3,000 worth of groceries using a UPI QR code. The payment journey involves multiple systems:
+> 
+> **Customer App** → **Merchant POS** → **Payment Gateway** → **Bank** → **Webhooks** → **Merchant Database**
 
-### Technology Stack
-- **Backend:** FastAPI (Python)
-- **Database:** SQLite
-- **Frontend:** Static HTML/CSS/JS
-- **AI:** LLM API integration (structured prompts)
-
-## Explicit Non-Goals
-
-PaymentTrace is **NOT**:
-
-❌ A customer-facing payment application  
-❌ A payment gateway  
-❌ A payment router  
-❌ A replacement for Razorpay or similar platforms  
-❌ An XAI/SHAP/LIME explainability system  
-❌ A predictive ML system  
-❌ A real-time monitoring dashboard  
-❌ A production payment processor
-
-## Architecture
-
-PaymentTrace uses a layered architecture where the deterministic reconstruction engine is the source of truth, the LLM serves as a language synthesis layer, and the frontend provides visual investigation capabilities:
+**What can go wrong:**
 
 ```
-DETERMINISTIC RECONSTRUCTION (Phase 1)
-         ↓
-EVIDENCE CLASSIFICATION
-(PROVEN / DERIVED / INCONSISTENCY / UNKNOWN)
-         ↓
-STRUCTURED EVIDENCE PAYLOAD
-         ↓
-GEMINI LLM (Phase 2)
-         ↓
-STRUCTURED JSON DIAGNOSIS
-         ↓
-FRONTEND DISPLAY (Phase 3)
+15:30:00  Customer scans UPI QR code
+15:30:02  Merchant creates order (order_12345, ₹3,000)
+15:30:03  Payment attempt 1 initiated (payment_001)
+15:30:05  Customer enters wrong UPI PIN → Payment fails
+15:30:15  Customer retries payment (payment_002)
+15:30:18  Payment authorized by bank
+15:30:20  Payment captured
+15:30:22  Webhook #1 arrives: "payment.authorized"
+15:30:45  Webhook #2 arrives: "payment.captured" (delayed)
+15:31:00  Merchant checks: Order shows "created" (webhook not processed yet)
+15:31:30  Webhook processor runs
+15:31:32  Order updated to "paid"
 ```
 
-### System Components
+**Investigation Challenges:**
+
+When the customer complains "I paid but my order isn't confirmed," the merchant support team needs to:
+
+1. **Correlate scattered records** — Gateway logs, webhook delivery records, merchant database, application logs
+2. **Reconstruct timeline** — Which payment attempt succeeded? When did events actually happen?
+3. **Identify inconsistencies** — Why does the gateway show "captured" but merchant database shows "created"?
+4. **Detect anomalies** — Was the webhook delayed? Did events arrive out of order? Are there duplicate events?
+5. **Determine unknowns** — Is data missing? What can't be proven from available evidence?
+
+**Current debugging approach:**
+- ❌ Manual log correlation across systems
+- ❌ Ad-hoc SQL queries
+- ❌ Guesswork about timing and causality
+- ❌ Inconsistent diagnostic quality
+- ❌ Time-consuming investigation (15-30 minutes per incident)
+
+**PaymentTrace approach:**
+- ✅ Automated journey reconstruction
+- ✅ Systematic evidence classification
+- ✅ Deterministic integrity validation
+- ✅ Evidence-backed natural language diagnosis
+- ✅ Explicit handling of unknowns
+
+**Important Note:** The D-Mart example above is an illustrative scenario demonstrating the general problem PaymentTrace addresses. The current prototype uses developer-created controlled scenarios (detailed below), not actual D-Mart or production customer transactions.
+
+---
+
+## What PaymentTrace Does
+
+PaymentTrace is a **payment forensics tool** for investigating individual payment journeys. It:
+
+### Core Capabilities
+
+1. **Journey Reconstruction**
+   - Chronologically orders events, attempts, and state changes
+   - Groups retries by order
+   - Calculates derived facts (attempt count, retry count, duration, gaps)
+
+2. **Evidence Classification**
+   - **PROVEN:** Directly from database records
+   - **DERIVED:** Calculated deterministically
+   - **INCONSISTENCY:** Violated invariants detected by rules
+   - **UNKNOWN:** Cannot be established from available data
+
+3. **Integrity Validation**
+   - **Phase 4A:** State machine transition validation
+   - **Phase 4B:** Timestamp ordering validation
+   - **Phase 4C:** Duplicate/missing event detection
+   - **Phase 4D:** Timeline gap detection (conservative thresholds)
+
+4. **Constrained LLM Synthesis**
+   - Converts structured evidence into natural language
+   - 13 anti-hallucination constraints
+   - Evidence-grounded explanations only
+
+5. **Uncertainty Preservation**
+   - Explicitly marks what cannot be determined
+   - **UNKNOWN ≠ FAILURE**
+   - **INCONSISTENCY ≠ ROOT CAUSE**
+
+### What PaymentTrace Is NOT
+
+- ❌ A replacement for payment dashboards (Razorpay Dashboard, etc.)
+- ❌ A real-time payment monitoring system
+- ❌ A guaranteed root cause detection system
+- ❌ A production payment processing platform
+- ❌ A financial reconciliation system
+
+### What PaymentTrace IS
+
+- ✅ A forensic investigation tool for post-incident analysis
+- ✅ An evidence classification system
+- ✅ A demonstration of deterministic + LLM architecture
+- ✅ A prototype for evidence-backed diagnostic reasoning
+- ✅ An independent student buildathon project
+
+---
+
+## System Architecture
+
+```mermaid
+flowchart TD
+    A[Payment Events & Attempts] --> B[Journey Reconstruction]
+    
+    B --> C[Chronological Ordering]
+    C --> D[Derived Facts:<br/>attempts, retries, duration, gaps]
+    
+    D --> E[Evidence Classification]
+    
+    E --> E1[PROVEN<br/>Directly from records]
+    E --> E2[DERIVED<br/>Calculated facts]
+    E --> E3[INCONSISTENCY<br/>Violated invariants]
+    E --> E4[UNKNOWN<br/>Cannot establish]
+    
+    E1 --> F[Deterministic Integrity Engine]
+    E2 --> F
+    E3 --> F
+    E4 --> F
+    
+    F --> F1[Phase 4A:<br/>State Validation]
+    F --> F2[Phase 4B:<br/>Ordering Validation]
+    F --> F3[Phase 4C:<br/>Duplicate/Missing Events]
+    F --> F4[Phase 4D:<br/>Timeline Gap Detection]
+    
+    F1 --> G[Evidence Matrix]
+    F2 --> G
+    F3 --> G
+    F4 --> G
+    
+    G --> H[Structured Evidence Payload]
+    H --> I[Constrained LLM<br/>Evidence Synthesis]
+    I --> J[Evidence-Backed Diagnosis]
+    J --> K[Frontend Display]
+    
+    style A fill:#e3f2fd
+    style F fill:#fff3e0
+    style I fill:#f3e5f5
+    style K fill:#e8f5e9
+```
+
+**Architectural Principle:** The deterministic engine is the source of truth. The LLM is a natural language synthesis layer only.
+
+---
+
+## Evidence Model
+
+PaymentTrace classifies every fact into exactly **one of four categories:**
+
+| Category | Definition | Source | Example |
+|----------|-----------|--------|---------|
+| **🟢 PROVEN** | Directly supported by database records | `payment_events`, `payment_attempts`, `orders` tables | "Event 'payment.captured' occurred at 2026-09-05T15:00:10Z" |
+| **🔵 DERIVED** | Deterministically calculated from records | Timestamp arithmetic, counting, duration calculations | "Journey duration: 54.2 seconds", "Total attempts: 2" |
+| **🔴 INCONSISTENCY** | A contradiction or violated invariant | Deterministic integrity rules (Phase 4A/B/C) | "Payment captured without prior authorization event" |
+| **🟡 UNKNOWN** | Cannot be established from available evidence | Missing data detection, Phase 4D timing anomalies | "No payment.initiated event found when authorized exists" |
+
+### Critical Principles
+
+**UNKNOWN ≠ FAILURE**  
+An unknown fact or timing anomaly does not prove payment failure. It indicates missing information or unusual patterns.
+
+**INCONSISTENCY ≠ ROOT CAUSE**  
+An inconsistency reveals a violated invariant but doesn't by itself prove the underlying cause (e.g., network failure, bank rejection).
+
+**DERIVED ≠ PROVEN**  
+Calculated facts are deterministic but depend on timestamp accuracy and data completeness.
+
+**LLM ≠ SOURCE OF TRUTH**  
+The LLM converts structured evidence into natural language. It does not determine facts, calculate metrics, or classify evidence.
+
+---
+
+## Deterministic Integrity Engine
+
+PaymentTrace implements **four phases of automated integrity analysis:**
+
+### Phase 4A: State Machine Validation
+
+**Detects:** Invalid payment lifecycle transitions
+
+**Rules:**
+- ❌ Payment captured without prior authorization
+- ❌ Terminal state regression (captured → initiated)
+- ❌ Logically impossible state progressions
+
+**Classification:** `INCONSISTENCY`
+
+**Example:** Scenario C detects `payment.captured` without `payment.authorized`
+
+---
+
+### Phase 4B: Timestamp Ordering Validation
+
+**Detects:** Logical timestamp violations
+
+**Rules:**
+- ❌ `authorized` timestamp < `initiated` timestamp
+- ❌ `captured` timestamp < `authorized` timestamp
+- ❌ Any chronologically impossible event sequence
+
+**Classification:** `INCONSISTENCY`
+
+**Example:** Scenario E detects `authorized` event at 15:00:00 when `initiated` occurred at 15:00:10
+
+---
+
+### Phase 4C: Duplicate & Missing Event Detection
+
+**Duplicates:**
+- Detects repeated lifecycle events (e.g., two `payment.captured` for same `payment_id`)
+- Ignores `webhook.received` (webhooks can legitimately retry)
+- **Classification:** `INCONSISTENCY`
+
+**Missing Events:**
+- Conservatively identifies absent but expected events
+- Does **not** claim event never occurred, only that it's not in available records
+- **Classification:** `UNKNOWN`
+
+**Examples:**
+- Scenario F: Duplicate `payment.captured` detected → `INCONSISTENCY`
+- Scenario G: Missing `payment.initiated` when `authorized` exists → `UNKNOWN`
+
+---
+
+### Phase 4D: Timeline Gap Detection
+
+**Detects:** Unusual timing patterns using conservative thresholds
+
+**Thresholds (from `backend/services/integrity.py`):**
+
+| Transition | Threshold | Classification |
+|-----------|-----------|----------------|
+| `initiated → authorized` | > 90 seconds | `UNKNOWN` |
+| `authorized → captured` | > 45 seconds | `UNKNOWN` |
+| Consecutive lifecycle gap | < 50 milliseconds | `UNKNOWN` |
+
+**Important:**
+- Timing anomalies are flagged as `UNKNOWN`, not `INCONSISTENCY`
+- Long gaps **do not prove failure** (legitimate authorization delays exist)
+- Near-zero gaps may indicate timestamp precision issues
+- Thresholds are prototype heuristics requiring domain validation
+
+**Examples:**
+- Scenario B: 45s gap (below 90s threshold) → **No Phase 4D detection** ✓
+- Scenario H: 120s gap (above 90s threshold) → `UNKNOWN` detection
+- Scenario I: 20ms gaps → `UNKNOWN` detection
+
+**Design Rationale:** The 90-second threshold was chosen to avoid flagging Scenario B's legitimate 45-second authorization delay as an anomaly.
+
+---
+
+## Where AI Is Used (LLM Boundary)
+
+### What the Deterministic Engine Does
+
+✅ Orders events chronologically by timestamp  
+✅ Calculates attempt count, retry count, journey duration  
+✅ Validates state machine transitions  
+✅ Detects out-of-order timestamps  
+✅ Identifies duplicate/missing events  
+✅ Flags timeline anomalies  
+✅ Classifies all evidence (PROVEN/DERIVED/INCONSISTENCY/UNKNOWN)
+
+### What the LLM Does
+
+✅ Converts structured evidence into natural language  
+✅ Synthesizes technical narrative from facts  
+✅ Generates evidence-backed explanations
+
+### What the LLM Must NOT Do
+
+❌ Query the database  
+❌ Determine payment facts or journey state  
+❌ Calculate retry counts or durations  
+❌ Classify evidence categories  
+❌ Invent facts not present in evidence  
+❌ Infer root causes without supporting evidence  
+❌ Convert UNKNOWN into PROVEN  
+❌ Convert DERIVED into PROVEN  
+❌ Claim payment failed if later evidence shows success  
+❌ Speculate beyond available evidence
+
+**Architecture:** Evidence-Backed Natural Language Generation
+
+**LLM Provider:** Google Gemini (`gemini-3.7-flash`)  
+**Constraints:** 13 anti-hallucination rules enforced through system prompts  
+**Response Format:** Structured JSON with Pydantic validation
+
+**Design Principle:**  
+"Deterministic code decides what the system knows; the LLM decides how that evidence is communicated."
+
+---
+
+## Current Prototype Data
+
+### ⚠️ Important Data Disclosure
+
+The current PaymentTrace prototype uses **developer-created, controlled synthetic payment scenarios** for deterministic testing and demonstration.
+
+**What the data is:**
+- ✅ Manually constructed payment lifecycle patterns
+- ✅ Controlled fixtures with known ground truth
+- ✅ Intentionally designed to reproduce specific anomaly types
+- ✅ Developer-created test scenarios (created by project author)
+
+**What the data is NOT:**
+- ❌ Real customer payment records
+- ❌ Production payment gateway traces
+- ❌ Actual D-Mart, Razorpay, or Paytm merchant transactions
+- ❌ Sanitized production data
+- ❌ Real incident recordings
+
+**Disclaimer:** All demonstration scenarios are developer-created controlled test data. No real customer payment information is used. No production database access exists.
+
+**Why synthetic data?**
+1. Real customer payment data contains sensitive PII and financial information
+2. Controlled scenarios enable deterministic testing with known ground truth
+3. Specific anomaly types can be intentionally constructed for validation
+4. Reproduction is deterministic and testable
+5. Ethical constraints prevent student projects from accessing production payment data
+
+**Data Location:** `backend/fixtures/data.py` and `backend/fixtures/advanced_scenarios.py`
+
+---
+
+## Demo Scenarios
+
+PaymentTrace includes **8 developer-created controlled scenarios** demonstrating different payment lifecycle patterns:
+
+| ID | Description | Problem | Phase | Detection | Purpose |
+|----|-------------|---------|-------|-----------|---------|
+| **A** | UPI Retry Recovery | Normal retry flow | - | No anomalies | Baseline: normal multi-attempt journey |
+| **B** | Late Authorization | 45s initiated→authorized gap | - | No Phase 4D flag (below 90s) | Verify threshold calibration |
+| **C** | Invalid State Transition | Captured without authorized | 4A | `INCONSISTENCY` | State machine violation |
+| **E** | Out-of-Order Events | Authorized timestamp < initiated | 4B | `INCONSISTENCY` | Timestamp ordering violation |
+| **F** | Duplicate Lifecycle Event | Two `payment.captured` events | 4C | `INCONSISTENCY` | Duplicate detection |
+| **G** | Missing Expected Event | No `initiated` when `authorized` exists | 4C | `UNKNOWN` | Missing event handling |
+| **H** | Long Authorization Gap | 120s initiated→authorized gap | 4D | `UNKNOWN` | Long gap detection |
+| **I** | Near-Zero Timing | 20ms consecutive lifecycle gaps | 4D | `UNKNOWN` | Fast timing anomaly |
+
+**Key Design Verification:**
+- Scenario B (45s gap) correctly does **not** trigger Phase 4D because 45 < 90-second threshold
+- This confirms the system does not generate false positives for legitimate authorization delays
+
+**Access:** These scenarios are available through the API as `order_scenario_a`, `order_scenario_b`, etc.
+
+---
+
+## From Prototype to Future Real-World Integration
+
+The current implementation establishes the deterministic forensic engine using controlled data. Future integration could connect PaymentTrace to operational payment infrastructure:
+
+### Current Architecture (Prototype)
 
 ```
-┌─────────────────┐
-│   Frontend      │  Functional web interface (Phase 3)
-│   (Phase 3)     │  Order search, timeline, evidence, diagnosis
-└────────┬────────┘
-         │
-         │ HTTP/REST (Fetch API)
+Developer-Created Database
          ↓
-┌─────────────────┐
-│   FastAPI       │  Phase 1: /journeys/{order_id}
-│   Backend       │  Phase 2: /journeys/{order_id}/diagnosis
-└────────┬────────┘
-         │
-         ├─────────────┐
-         ↓             ↓
-┌─────────────┐  ┌──────────────┐
-│  SQLite DB  │  │ Gemini API   │
-│  Events     │  │ (External)   │
-│  Orders     │  │              │
-│  Attempts   │  │              │
-└─────────────┘  └──────────────┘
+Controlled Scenarios
+         ↓
+PaymentTrace Engine
 ```
 
-### Critical Architectural Constraints
+### Proposed Future Architecture
 
-The LLM (Gemini) does **NOT**:
-- Determine payment facts or journey state
-- Calculate attempt counts, retry gaps, or durations
-- Classify evidence as PROVEN/DERIVED/INCONSISTENCY/UNKNOWN
-- Access raw database records
+```mermaid
+flowchart LR
+    A[Gateway API] --> N[Normalization Layer]
+    B[Webhooks] --> N
+    C[Merchant DB] --> N
+    D[App Logs] --> N
+    E[Observability] --> N
+    
+    N --> F[Unified Evidence Model]
+    F --> G[PaymentTrace Engine]
+    G --> H[Integrity Validation]
+    H --> I[Evidence-Backed Diagnosis]
+    
+    style N fill:#fff3e0
+    style G fill:#e3f2fd
+    style I fill:#e8f5e9
+```
 
-The LLM **ONLY**:
-- Receives pre-classified structured evidence
-- Converts evidence into natural language explanations
-- Operates under 13 strict anti-hallucination constraints
+**Proposed Future Data Sources:**
+- Payment gateway APIs (test mode initially, then production with authorization)
+- Webhook delivery logs
+- Merchant order databases
+- Application logs
+- Observability platforms (Datadog, Sentry)
 
-All facts are established by the deterministic Phase 1 reconstruction engine.
+**Integration Requirements:**
+- Privacy-compliant data handling
+- Secure credential management
+- Rate limiting and backpressure
+- Authentication and authorization
+- Audit logging
+- Data retention policies
+- Cross-gateway schema normalization
 
-## Local Setup
+**Benefits:**
+- Real operational usefulness for production incident investigation
+- Larger trace volume and pattern diversity
+- Automatic ingestion from live systems
+- Merchant-specific diagnostic rules
+- Continuous integrity monitoring
+- Historical anomaly analysis
+
+**Status:** 🔮 **FUTURE WORK** (not currently implemented)
+
+**Important:** Real-world integration would require compliance with data protection regulations, security audits, and proper authorization from payment system operators.
+
+---
+
+## Technical Stack
+
+- **Backend:** FastAPI (Python 3.9+)
+- **Database:** SQLite with `aiosqlite` (developer-created fixtures)
+- **Frontend:** Vanilla HTML/CSS/JavaScript (no frameworks)
+- **LLM:** Google Gemini (`gemini-3.7-flash`) via `google-genai` SDK
+- **Testing:** `pytest` with `pytest-asyncio`, `httpx`
+- **Configuration:** `python-dotenv` for environment variables
+
+---
+
+## Running Locally
 
 ### Prerequisites
+
 - Python 3.9+
 - pip
 - (Optional) Google Gemini API key for diagnosis endpoint
 
 ### Installation
 
-1. **Clone repository:**
-   ```bash
-   git clone <repository-url>
-   cd PaymentTrace
-   ```
-
-2. **Create virtual environment:**
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Configure Gemini API (Optional):**
-   
-   To use the diagnosis endpoint (`/journeys/{order_id}/diagnosis`), you need a Gemini API key:
-   
-   ```bash
-   # Create .env file (NEVER commit this file)
-   cp .env.example .env
-   
-   # Edit .env and add your key:
-   # GEMINI_API_KEY=your_actual_api_key_here
-   ```
-   
-   **IMPORTANT:** The `.env` file is gitignored and must **NEVER** be committed to version control.
-   
-   Without a Gemini API key:
-   - Phase 1 endpoints (`/journeys/{order_id}`) work normally
-   - Phase 2 diagnosis endpoint returns 503 error
-   - All tests still pass (tests use mocked LLM responses)
-
-5. **Run backend:**
-   ```bash
-   python -m uvicorn backend.main:app --reload
-   ```
-   
-   The backend will start at `http://localhost:8000`
-
-6. **Open frontend:**
-   
-   Open `frontend/index.html` in your web browser (Chrome/Firefox/Safari):
-   
-   ```bash
-   # macOS
-   open frontend/index.html
-   
-   # Linux
-   xdg-open frontend/index.html
-   
-   # Windows
-   start frontend/index.html
-   ```
-   
-   Or navigate directly: `file:///path/to/PaymentTrace/frontend/index.html`
-
-7. **Verify installation:**
-   - Backend health: http://localhost:8000/health
-   - API docs: http://localhost:8000/docs
-   - Frontend: Use the web interface to diagnose `order_scenario_a`
-
-### Verify Installation
-
 ```bash
-curl http://localhost:8000/health
+# 1. Clone repository
+git clone <repository-url>
+cd PaymentTrace
+
+# 2. Create virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Configure Gemini API (Optional)
+cp .env.example .env
+# Edit .env and add: GEMINI_API_KEY=your_actual_api_key_here
+
+# 5. Run backend
+python -m uvicorn backend.main:app --reload
+
+# 6. Open frontend
+open frontend/index.html  # macOS
+# or navigate to: file:///path/to/PaymentTrace/frontend/index.html
 ```
 
-Expected response:
-```json
-{
-  "status": "healthy",
-  "service": "PaymentTrace",
-  "version": "0.3.0",
-  "phase": "2 - LLM Diagnostic Integration",
-  "llm_configured": true
-}
-```
+**Backend:** http://localhost:8000  
+**API Docs:** http://localhost:8000/docs  
+**Health Check:** http://localhost:8000/health
 
-## Project Status
+**Note:** Without a Gemini API key, Phase 1 endpoints (`/journeys/{order_id}`) work normally. Phase 2 diagnosis endpoint returns 503 error. All 76 tests still pass (tests use mocked LLM responses).
 
-**Current Phase:** Phase 3 - Functional Frontend ✅ **COMPLETE**
-
-See [PROJECT_STATUS.md](PROJECT_STATUS.md) for detailed phase breakdown.
-
-### What Works Now
-
-**Phase 1 - Deterministic Payment Journey Reconstruction:**
-✅ SQLite database with payment events, attempts, and orders  
-✅ Deterministic journey reconstruction from database records  
-✅ Evidence classification (PROVEN/DERIVED/INCONSISTENCY/UNKNOWN)  
-✅ Chronological event ordering by timestamp  
-✅ Derived fact calculations (attempts, retries, duration, gaps)  
-✅ API endpoint: `GET /journeys/{order_id}`  
-
-**Phase 2 - Evidence-Grounded AI Diagnostic Explanations:**
-✅ Google Gemini LLM integration (`gemini-3.7-flash`)  
-✅ Structured evidence payload generation  
-✅ Constrained system prompt with 13 anti-hallucination rules  
-✅ Structured JSON diagnosis output with Pydantic validation  
-✅ API endpoint: `GET /journeys/{order_id}/diagnosis`  
-✅ Graceful error handling for missing API keys and malformed responses  
-✅ 34/34 tests passing (all LLM calls mocked in tests)  
-
-**Phase 3 - Functional Frontend:**
-✅ Order ID search interface with quick-select buttons  
-✅ Real-time diagnosis API integration (no hardcoded data)  
-✅ Order summary display (amount, status, attempts, retries, duration)  
-✅ Payment timeline visualization (chronological, color-coded events)  
-✅ Payment attempts display with retry highlighting  
-✅ Evidence panel with 4-category tabs (PROVEN/DERIVED/INCONSISTENCY/UNKNOWN)  
-✅ Structured AI diagnosis rendering (summary, timeline, known/unknown facts)  
-✅ Comprehensive error handling (404, 503, 500, network failures)  
-✅ Loading states with progress indicators  
-✅ Responsive design (mobile/tablet/desktop)  
-✅ Professional developer-tool styling  
-
-### What Doesn't Exist Yet
-❌ Production database configuration  
-❌ Real-time event ingestion  
-❌ Authentication or authorization  
-❌ Monitoring and logging  
-❌ Deployment configuration  
-❌ Advanced journey analysis features
+---
 
 ## API Endpoints
 
-### Phase 1 Endpoints
+### Phase 1: Deterministic Reconstruction (No LLM Required)
 
-#### `GET /health`
-Health check with LLM configuration status.
+**`GET /journeys/{order_id}`**  
+Deterministic payment journey reconstruction
 
-#### `GET /`
-API information and endpoint list.
-
-#### `GET /journeys/{order_id}`
-Deterministic payment journey reconstruction (no LLM required).
-
-Returns structured journey data with:
+**Returns:**
 - Order details
 - Chronologically ordered events
 - Payment attempts
-- Derived facts (attempts, retries, duration)
+- Derived facts
 - Evidence classification (PROVEN/DERIVED/INCONSISTENCY/UNKNOWN)
 
 **Example:**
@@ -306,129 +527,168 @@ Returns structured journey data with:
 curl http://localhost:8000/journeys/order_scenario_a
 ```
 
-### Phase 2 Endpoints
+### Phase 2: Evidence-Backed Diagnosis (Requires Gemini API Key)
 
-#### `GET /journeys/{order_id}/diagnosis`
-Complete diagnostic report with AI-generated explanation.
-
-Combines Phase 1 reconstruction with Gemini-generated natural language explanation.
-
-**Requires:** `GEMINI_API_KEY` environment variable
+**`GET /journeys/{order_id}/diagnosis`**  
+Complete diagnostic report with AI-generated explanation
 
 **Example:**
 ```bash
-curl http://localhost:8000/journeys/order_scenario_a/diagnosis
+curl http://localhost:8000/journeys/order_scenario_h/diagnosis
 ```
 
-**Response structure:**
-```json
-{
-  "order_id": "order_scenario_a",
-  "journey": {
-    "order": {...},
-    "events": [...],
-    "attempts": [...],
-    "evidence": [...]
-  },
-  "diagnosis": {
-    "summary": "Brief overview of what happened",
-    "what_happened": "Chronological explanation...",
-    "what_is_known": ["fact 1", "fact 2"],
-    "what_cannot_be_determined": ["unknown 1"],
-    "recommended_action": "Suggested next steps...",
-    "raw_explanation": "Full JSON response from Gemini"
-  },
-  "llm_model": "gemini-3.7-flash",
-  "evidence_based": true
-}
-```
+---
 
-**Note:** The diagnosis endpoint depends on external Gemini API availability. During high demand, Gemini may return 503 errors. This is an external provider issue, not an application error.
+## Testing
 
-## Development Guidelines
-
-### Principles
-1. **Evidence-based:** Every conclusion must trace to source data
-2. **Deterministic:** Same input → same reconstruction (Phase 1)
-3. **Minimal dependencies:** Only add what's necessary
-4. **Clear separation:** Proven facts ≠ Derived insights
-5. **Constrained AI:** LLM receives structured evidence, not raw logs
-6. **Architectural boundary:** Deterministic engine is source of truth, LLM is language layer
-
-### Code Structure
-```
-backend/
-  main.py                   # FastAPI app + routes
-  models.py                 # Pydantic models
-  database.py               # SQLite connection and schema
-  services/
-    reconstruction.py       # Phase 1: Deterministic journey reconstruction
-    evidence.py             # Phase 1: Evidence classification
-    llm.py                  # Phase 2: Gemini integration
-  fixtures/
-    data.py                 # Test scenarios
-
-frontend/
-  index.html                # Phase 3: Main UI structure
-  styles.css                # Phase 3: Professional styling (~780 lines)
-  app.js                    # Phase 3: API integration & rendering (~545 lines)
-
-tests/
-  test_reconstruction.py    # Phase 1 tests
-  test_api.py               # Phase 1 API tests
-  test_llm.py               # Phase 2 LLM service tests (mocked)
-  test_diagnosis_api.py     # Phase 2 diagnosis endpoint tests (mocked)
-```
-
-### Testing
-
-Run the complete test suite:
 ```bash
 pytest -v
 ```
 
-**All 34 tests use mocked Gemini responses.** Tests do **NOT** require a real `GEMINI_API_KEY` and will not make external API calls.
+**Current status: ✅ 76/76 tests passing**
 
-Test breakdown:
-- **10 tests:** Phase 1 reconstruction logic
-- **8 tests:** Phase 1 API endpoints
-- **8 tests:** Phase 2 LLM service (mocked)
-- **8 tests:** Phase 2 diagnosis endpoint (mocked)
+**Test breakdown:**
+- 10 tests: Phase 1 reconstruction logic
+- 8 tests: Phase 1 API endpoints
+- 8 tests: Phase 2 LLM service (mocked)
+- 8 tests: Phase 2 diagnosis endpoint (mocked)
+- 42 tests: Phase 4A/B/C/D integrity analysis
 
-## Limitations and Disclaimers
+**Important:** All tests use mocked Gemini responses. Tests do **NOT** require a real `GEMINI_API_KEY` and will not make external API calls.
 
-**This is an MVP for development and demonstration purposes.**
+**What Tests Verify:**
+- ✅ Event chronological ordering
+- ✅ Attempt/retry counting
+- ✅ Duration calculations
+- ✅ State machine validation (Phase 4A)
+- ✅ Out-of-order detection (Phase 4B)
+- ✅ Duplicate/missing event detection (Phase 4C)
+- ✅ Timeline gap detection (Phase 4D)
+- ✅ Evidence classification
+- ✅ API contract validation
+- ✅ Error handling
 
-PaymentTrace is **NOT**:
-- Production-ready for real payment processing
-- Guaranteed to prevent LLM hallucinations (constrained, not perfect)
-- Validated for accuracy on real-world payment data
-- Suitable for compliance-critical or financial reporting use cases
-- A replacement for proper payment gateway investigation tools
-
-**Known Limitations:**
-- Fixture data only (no real Razorpay production data)
-- Frontend serves static files (not a production web server)
-- Diagnosis endpoint depends on external Gemini API availability
-- No authentication, rate limiting, or production safeguards
-- SQLite database (not suitable for production scale)
-
-## Contributing
-
-This is an MVP under active development. Current implementation status:
-- ✅ Phase 0: Project Setup
-- ✅ Phase 1: Deterministic Reconstruction
-- ✅ Phase 2: LLM Diagnostic Integration
-- ✅ Phase 3: Functional Frontend
-- ⏳ Phase 4: Advanced Journey Analysis (next)
-
-## License
-
-See [LICENSE](LICENSE) file.
+**What Tests Do NOT Verify:**
+- ❌ Production payment gateway behavior
+- ❌ Real Gemini API responses
+- ❌ Real-world incident detection accuracy
+- ❌ Human evaluation of diagnostic usefulness
+- ❌ Large-scale performance
 
 ---
 
-**Version:** 0.3.0  
-**Last Updated:** September 5, 2026  
-**Current Branch:** `feature/phase2-llm-integration`  
-**Current Commit:** `f845b8e`
+## Current Limitations
+
+### Prototype Scope
+
+1. **Data Source:** Database is entirely developer-created synthetic data
+2. **No Production Integration:** No real payment gateway or database connections
+3. **Limited Coverage:** Deterministic rules cover a defined set of lifecycle anomalies
+4. **Heuristic Thresholds:** Phase 4D thresholds (90s, 45s, 50ms) require domain validation
+5. **Generic Payment Flow:** Payment-method-specific rules not implemented
+6. **Single Journey Analysis:** Does not perform population-level pattern analysis
+7. **Prototype Scale:** Not designed for high-volume production workloads
+8. **Missing Production Features:** No authentication, authorization, audit logging, observability
+
+### Technical Constraints
+
+9. **Causality Limitations:** Cannot prove causes absent from telemetry (e.g., bank network failures)
+10. **LLM Dependency:** Diagnosis quality depends on Gemini model behavior
+11. **Timestamp Precision:** Relies on accurate timestamp recording
+12. **Gateway Schema Variance:** Real payment gateways have provider-specific event schemas
+13. **No Reconciliation Authority:** Should not be used as financial reconciliation system
+
+### Evaluation Status
+
+14. **No Human Evaluation:** Diagnostic usefulness not formally evaluated with payment operations engineers
+15. **No Baseline Comparison:** System not experimentally compared against alternative approaches
+16. **No Statistical Validation:** Precision/recall not measured on real incident dataset
+17. **No Large-Scale Testing:** Performance not validated on high-volume trace datasets
+
+**Important:** These are current boundaries of the prototype, not system failures. They represent future work opportunities.
+
+---
+
+## Future Work
+
+### Near Term
+- Payment gateway test-mode integration
+- Webhook log ingestion
+- Expanded synthetic scenario library
+- Real Gemini API testing with production key
+- Frontend responsive design testing
+- Performance profiling
+
+### Medium Term
+- Payment-method-specific rules (UPI, card, netbanking, wallet)
+- Merchant-specific lifecycle policies
+- Multi-order incident clustering
+- Historical anomaly retrieval
+- Developer remediation suggestions
+- Adaptive threshold tuning based on gateway behavior
+
+### Long Term
+- Production observability integrations (Datadog, Sentry)
+- Real-time forensic monitoring
+- Cross-merchant pattern analysis
+- Automated incident triage
+- Enterprise access controls
+- Human evaluation study with payment operations engineers
+- Experimental validation against baseline approaches
+- Causal inference under uncertainty
+
+---
+
+## Technical Documentation
+
+For detailed system architecture, evaluation methodology, experimental design, and future research directions:
+
+**📄 [Read the PaymentTrace Technical Architecture & Evaluation Document →](docs/PAYMENTTRACE_TECHNICAL_PAPER.md)**
+
+This document uses a technical paper-style structure to describe:
+- Detailed system architecture
+- Experimental methodology and baselines
+- Proposed evaluation metrics
+- Ablation study design
+- Current findings and limitations
+- Future research directions
+
+---
+
+## Academic Attribution
+
+<div align="center">
+
+<img src="frontend/assets/VVIT_Logo.png" alt="VVIT Logo" width="100"/>
+
+**Academic Affiliation:**  
+Vasireddy Venkatadri Institute of Technology (VVIT)
+
+B.Tech — Computer Science and Engineering (AI & ML)
+
+**Developed by:** Adhimulam Bhargav Sai Viswanath (VVIT Student)
+
+PaymentTrace is an independent student buildathon project demonstrating evidence-backed payment forensics. It is not officially sponsored, endorsed, or deployed by VVIT or Paytm.
+
+</div>
+
+---
+
+## License
+
+This project is licensed under the MIT License.
+
+---
+
+<div align="center">
+
+**PaymentTrace** • Evidence-backed payment forensics
+
+*Reconstruct the journey. Trace the evidence. Explain what actually happened.*
+
+**Project Type:** Student Buildathon Project  
+**Status:** Functional Prototype (76/76 tests passing)
+
+**Last Updated:** September 5, 2026
+
+</div>

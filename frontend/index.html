@@ -3,17 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PaymentTrace - Payment Journey Diagnostics</title>
+    <title>PaymentTrace - Evidence-backed Payment Forensics</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
 </head>
 <body>
     <!-- Header -->
     <header class="header">
         <div class="container">
             <div class="header-content">
-                <h1 class="logo">PaymentTrace</h1>
-                <p class="tagline">Payment Journey Reconstruction & Evidence-Grounded Diagnosis</p>
-                <span class="phase-badge">Phase 3 — Functional Frontend</span>
+                <div class="header-brand">
+                    <img src="assets/logo-dark.svg" alt="PaymentTrace" class="logo-icon">
+                    <div class="header-text">
+                        <h1 class="logo">PaymentTrace</h1>
+                        <p class="tagline">Evidence-backed payment forensics</p>
+                    </div>
+                </div>
+                <div class="header-status">
+                    <span class="status-indicator" id="statusIndicator">
+                        <span class="status-dot"></span>
+                        <span class="status-text">Backend Connected</span>
+                    </span>
+                </div>
             </div>
         </div>
     </header>
@@ -24,32 +35,78 @@
             
             <!-- Search Section -->
             <section class="search-section">
-                <h2>Investigate Payment Journey</h2>
+                <div class="search-header">
+                    <h2>Trace Payment Journey</h2>
+                    <p class="search-subtitle">Reconstruct the payment journey from deterministic evidence</p>
+                </div>
                 <div class="search-form">
                     <div class="input-group">
-                        <label for="orderIdInput">Order ID</label>
+                        <label for="orderIdInput">Enter Order ID</label>
                         <input 
                             type="text" 
                             id="orderIdInput" 
-                            placeholder="e.g., order_scenario_a"
+                            placeholder="order_scenario_a"
                             autocomplete="off"
                         >
                     </div>
-                    <button id="diagnoseBtn" class="btn-primary">Diagnose Journey</button>
+                    <button id="diagnoseBtn" class="btn-primary">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 8px;">
+                            <path d="M2.5 8 L13.5 8 M5.5 5 L5.5 11 M8 5 L8 11 M10.5 5 L10.5 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        </svg>
+                        Trace Payment
+                    </button>
                 </div>
                 
-                <!-- Quick Select -->
-                <div class="quick-select">
-                    <span class="quick-select-label">Quick select:</span>
-                    <button class="btn-secondary" data-order-id="order_scenario_a">Scenario A</button>
-                    <button class="btn-secondary" data-order-id="order_scenario_b">Scenario B</button>
+                <!-- Demo Scenarios -->
+                <div class="demo-scenarios">
+                    <div class="scenarios-header">
+                        <span class="scenarios-label">Demo Scenarios</span>
+                        <span class="scenarios-hint">Click to load</span>
+                    </div>
+                    <div class="scenarios-grid">
+                        <button class="scenario-btn" data-order-id="order_scenario_a" data-name="UPI Retry Recovery">
+                            <span class="scenario-icon">A</span>
+                            <span class="scenario-name">UPI Retry Recovery</span>
+                        </button>
+                        <button class="scenario-btn" data-order-id="order_scenario_b" data-name="Late Authorization">
+                            <span class="scenario-icon">B</span>
+                            <span class="scenario-name">Late Authorization</span>
+                        </button>
+                        <button class="scenario-btn" data-order-id="order_scenario_c" data-name="Invalid State">
+                            <span class="scenario-icon">C</span>
+                            <span class="scenario-name">Invalid State</span>
+                        </button>
+                        <button class="scenario-btn" data-order-id="order_scenario_e" data-name="Out-of-Order">
+                            <span class="scenario-icon">E</span>
+                            <span class="scenario-name">Out-of-Order</span>
+                        </button>
+                        <button class="scenario-btn" data-order-id="order_scenario_f" data-name="Duplicate Event">
+                            <span class="scenario-icon">F</span>
+                            <span class="scenario-name">Duplicate Event</span>
+                        </button>
+                        <button class="scenario-btn" data-order-id="order_scenario_g" data-name="Missing Event">
+                            <span class="scenario-icon">G</span>
+                            <span class="scenario-name">Missing Event</span>
+                        </button>
+                        <button class="scenario-btn" data-order-id="order_scenario_h" data-name="Long Gap">
+                            <span class="scenario-icon">H</span>
+                            <span class="scenario-name">Long Authorization Gap</span>
+                        </button>
+                        <button class="scenario-btn" data-order-id="order_scenario_i" data-name="Near-Zero Timing">
+                            <span class="scenario-icon">I</span>
+                            <span class="scenario-name">Near-Zero Timing</span>
+                        </button>
+                    </div>
                 </div>
             </section>
 
             <!-- Loading State -->
             <div id="loadingState" class="loading-state hidden">
                 <div class="loading-spinner"></div>
-                <p id="loadingMessage">Reconstructing payment journey...</p>
+                <div class="loading-stages">
+                    <p id="loadingMessage" class="loading-message-primary">Reconstructing payment journey...</p>
+                    <p class="loading-message-secondary">Analyzing deterministic evidence</p>
+                </div>
             </div>
 
             <!-- Error State -->
@@ -89,13 +146,37 @@
                 </section>
 
                 <!-- Evidence Panel -->
-                <section class="card">
-                    <h2 class="card-title">Evidence Classification</h2>
+                <section class="card evidence-card">
+                    <h2 class="card-title">Evidence Matrix</h2>
+                    <p class="evidence-subtitle">Deterministic classification of payment journey facts</p>
                     <div class="evidence-tabs">
-                        <button class="evidence-tab active" data-category="PROVEN">PROVEN</button>
-                        <button class="evidence-tab" data-category="DERIVED">DERIVED</button>
-                        <button class="evidence-tab" data-category="INCONSISTENCY">INCONSISTENCY</button>
-                        <button class="evidence-tab" data-category="UNKNOWN">UNKNOWN</button>
+                        <button class="evidence-tab active" data-category="PROVEN">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="tab-icon">
+                                <path d="M3 8 L6 11 L13 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <span>PROVEN</span>
+                        </button>
+                        <button class="evidence-tab" data-category="DERIVED">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="tab-icon">
+                                <path d="M8 2 L8 14 M5 5 L11 5 M5 11 L11 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            </svg>
+                            <span>DERIVED</span>
+                        </button>
+                        <button class="evidence-tab" data-category="INCONSISTENCY">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="tab-icon">
+                                <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
+                                <path d="M8 5 L8 9 M8 11 L8 11.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            </svg>
+                            <span>INCONSISTENCY</span>
+                        </button>
+                        <button class="evidence-tab" data-category="UNKNOWN">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="tab-icon">
+                                <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
+                                <path d="M8 6 Q8 4.5 9 4.5 Q10 4.5 10 6 Q10 7 8 7.5 L8 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+                                <circle cx="8" cy="11" r="0.5" fill="currentColor"/>
+                            </svg>
+                            <span>UNKNOWN</span>
+                        </button>
                     </div>
                     <div id="evidenceContent" class="evidence-content">
                         <!-- Populated by JavaScript -->
@@ -105,10 +186,18 @@
                 <!-- AI Diagnosis -->
                 <section class="card diagnosis-card">
                     <div class="diagnosis-header">
-                        <h2 class="card-title">AI Diagnostic Explanation</h2>
+                        <div class="diagnosis-title-group">
+                            <h2 class="card-title">Evidence-Backed Diagnosis</h2>
+                            <p class="diagnosis-description">Natural language synthesis from deterministic evidence</p>
+                        </div>
                         <div class="diagnosis-meta">
-                            <span class="meta-badge">Evidence-Grounded Diagnosis</span>
-                            <span class="meta-badge" id="llmModel">Model: gemini-3.7-flash</span>
+                            <span class="meta-badge trust-badge">
+                                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="margin-right: 4px;">
+                                    <path d="M6 1 L7.5 4.5 L11 5 L8.5 7.5 L9 11 L6 9 L3 11 L3.5 7.5 L1 5 L4.5 4.5 Z" fill="currentColor"/>
+                                </svg>
+                                Evidence-Grounded
+                            </span>
+                            <span class="meta-badge model-badge" id="llmModel">gemini-3.7-flash</span>
                         </div>
                     </div>
                     
@@ -124,8 +213,16 @@
     <!-- Footer -->
     <footer class="footer">
         <div class="container">
-            <p>PaymentTrace v0.3.0 | Phase 3 - Functional Frontend</p>
-            <p>Backend API: <a href="http://localhost:8000/docs" target="_blank">http://localhost:8000/docs</a></p>
+            <div class="footer-content">
+                <div class="footer-left">
+                    <p class="footer-title">PaymentTrace</p>
+                    <p class="footer-tagline">Evidence-backed payment forensics</p>
+                </div>
+                <div class="footer-right">
+                    <a href="http://localhost:8000/health" target="_blank" class="footer-link">Health</a>
+                    <a href="http://localhost:8000/docs" target="_blank" class="footer-link">API Docs</a>
+                </div>
+            </div>
         </div>
     </footer>
 

@@ -122,27 +122,29 @@ def classify_evidence(order: Order, events: List[PaymentEvent],
     ))
 
     # INCONSISTENCY detection - check for conflicting data
+    # Check merchant order status vs final payment status
     if order.merchant_status and attempts:
         last_attempt_status = attempts[-1].status
+        # Only flag terminal state mismatches, not state progressions
         if order.merchant_status != last_attempt_status:
-            evidence_list.append(Evidence(
-                category="INCONSISTENCY",
-                statement=f"Merchant order status '{order.merchant_status}' does not match "
-                         f"last payment attempt status '{last_attempt_status}'",
-                source="comparison: orders.merchant_status vs payment_attempts.status"
-            ))
-
-    # Check if any event status conflicts with attempt status
-    for attempt in attempts:
-        related_events = [e for e in events if e.payment_id == attempt.payment_id]
-        for event in related_events:
-            if event.status and event.status != attempt.status:
+            # Check if this is a real inconsistency (both are terminal/final states)
+            terminal_statuses = {'captured', 'paid', 'failed', 'refunded'}
+            order_is_terminal = order.merchant_status.lower() in terminal_statuses
+            attempt_is_terminal = last_attempt_status.lower() in terminal_statuses
+            
+            # Only flag if both represent final/terminal states that conflict
+            if order_is_terminal and attempt_is_terminal:
                 evidence_list.append(Evidence(
                     category="INCONSISTENCY",
-                    statement=f"Event status '{event.status}' for payment {event.payment_id} "
-                             f"does not match attempt status '{attempt.status}'",
-                    source=f"comparison: event {event.event_id} vs attempt {attempt.attempt_id}"
+                    statement=f"Merchant order status '{order.merchant_status}' does not match "
+                             f"last payment attempt status '{last_attempt_status}'",
+                    source="comparison: orders.merchant_status vs payment_attempts.status"
                 ))
+
+    # Note: Removed blanket event-status-vs-attempt-status comparison
+    # Lifecycle events naturally have different intermediate statuses (initiated → authorized → captured)
+    # This is NOT an inconsistency but expected payment flow progression
+    # Phase 4A/4B/4C/4D handle actual state machine violations
 
     # UNKNOWN - gaps in data
     if not events:

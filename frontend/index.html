@@ -3,93 +3,132 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PaymentTrace</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #333;
-        }
-        .container {
-            background: white;
-            padding: 3rem;
-            border-radius: 12px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            max-width: 600px;
-            text-align: center;
-        }
-        h1 {
-            color: #667eea;
-            margin-bottom: 1rem;
-            font-size: 2.5rem;
-        }
-        .subtitle {
-            color: #666;
-            margin-bottom: 2rem;
-            font-size: 1.1rem;
-        }
-        .status {
-            background: #f0f4f8;
-            padding: 1.5rem;
-            border-radius: 8px;
-            margin-bottom: 1.5rem;
-        }
-        .status h2 {
-            color: #333;
-            margin-bottom: 0.5rem;
-            font-size: 1.2rem;
-        }
-        .badge {
-            display: inline-block;
-            background: #fbbf24;
-            color: #78350f;
-            padding: 0.4rem 1rem;
-            border-radius: 20px;
-            font-weight: 600;
-            font-size: 0.9rem;
-            margin-top: 0.5rem;
-        }
-        .note {
-            color: #666;
-            font-size: 0.95rem;
-            line-height: 1.6;
-        }
-        a {
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 500;
-        }
-        a:hover {
-            text-decoration: underline;
-        }
-    </style>
+    <title>PaymentTrace - Payment Journey Diagnostics</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="container">
-        <h1>PaymentTrace</h1>
-        <p class="subtitle">Developer diagnostic tool for payment journey investigation</p>
-        
-        <div class="status">
-            <h2>Project Status</h2>
-            <span class="badge">Phase 0: Setup</span>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <h1 class="logo">PaymentTrace</h1>
+                <p class="tagline">Payment Journey Reconstruction & Evidence-Grounded Diagnosis</p>
+                <span class="phase-badge">Phase 3 — Functional Frontend</span>
+            </div>
         </div>
-        
-        <div class="note">
-            <p>This is a minimal Phase 0 foundation.</p>
-            <p>No diagnostic functionality has been implemented yet.</p>
-            <p style="margin-top: 1rem;">
-                Backend API: <a href="http://localhost:8000/docs" target="_blank">http://localhost:8000/docs</a>
-            </p>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <div class="container">
+            
+            <!-- Search Section -->
+            <section class="search-section">
+                <h2>Investigate Payment Journey</h2>
+                <div class="search-form">
+                    <div class="input-group">
+                        <label for="orderIdInput">Order ID</label>
+                        <input 
+                            type="text" 
+                            id="orderIdInput" 
+                            placeholder="e.g., order_scenario_a"
+                            autocomplete="off"
+                        >
+                    </div>
+                    <button id="diagnoseBtn" class="btn-primary">Diagnose Journey</button>
+                </div>
+                
+                <!-- Quick Select -->
+                <div class="quick-select">
+                    <span class="quick-select-label">Quick select:</span>
+                    <button class="btn-secondary" data-order-id="order_scenario_a">Scenario A</button>
+                    <button class="btn-secondary" data-order-id="order_scenario_b">Scenario B</button>
+                </div>
+            </section>
+
+            <!-- Loading State -->
+            <div id="loadingState" class="loading-state hidden">
+                <div class="loading-spinner"></div>
+                <p id="loadingMessage">Reconstructing payment journey...</p>
+            </div>
+
+            <!-- Error State -->
+            <div id="errorState" class="error-state hidden">
+                <div class="error-icon">⚠️</div>
+                <h3 id="errorTitle">Error</h3>
+                <p id="errorMessage"></p>
+                <p id="errorSuggestion"></p>
+                <button id="retryBtn" class="btn-secondary">Try Again</button>
+            </div>
+
+            <!-- Results Section -->
+            <div id="resultsSection" class="results-section hidden">
+                
+                <!-- Order Summary -->
+                <section class="card">
+                    <h2 class="card-title">Order Summary</h2>
+                    <div class="summary-grid" id="orderSummary">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </section>
+
+                <!-- Payment Timeline -->
+                <section class="card">
+                    <h2 class="card-title">Payment Timeline</h2>
+                    <div class="timeline" id="paymentTimeline">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </section>
+
+                <!-- Payment Attempts -->
+                <section class="card">
+                    <h2 class="card-title">Payment Attempts</h2>
+                    <div id="paymentAttempts">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </section>
+
+                <!-- Evidence Panel -->
+                <section class="card">
+                    <h2 class="card-title">Evidence Classification</h2>
+                    <div class="evidence-tabs">
+                        <button class="evidence-tab active" data-category="PROVEN">PROVEN</button>
+                        <button class="evidence-tab" data-category="DERIVED">DERIVED</button>
+                        <button class="evidence-tab" data-category="INCONSISTENCY">INCONSISTENCY</button>
+                        <button class="evidence-tab" data-category="UNKNOWN">UNKNOWN</button>
+                    </div>
+                    <div id="evidenceContent" class="evidence-content">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </section>
+
+                <!-- AI Diagnosis -->
+                <section class="card diagnosis-card">
+                    <div class="diagnosis-header">
+                        <h2 class="card-title">AI Diagnostic Explanation</h2>
+                        <div class="diagnosis-meta">
+                            <span class="meta-badge">Evidence-Grounded Diagnosis</span>
+                            <span class="meta-badge" id="llmModel">Model: gemini-3.7-flash</span>
+                        </div>
+                    </div>
+                    
+                    <div id="diagnosisContent">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </section>
+
+            </div>
         </div>
-    </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>PaymentTrace v0.3.0 | Phase 3 - Functional Frontend</p>
+            <p>Backend API: <a href="http://localhost:8000/docs" target="_blank">http://localhost:8000/docs</a></p>
+        </div>
+    </footer>
+
+    <script src="app.js"></script>
 </body>
 </html>

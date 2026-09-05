@@ -85,45 +85,71 @@ PaymentTrace is **NOT**:
 ❌ A real-time monitoring dashboard  
 ❌ A production payment processor
 
-## Planned Architecture
+## Architecture
+
+PaymentTrace uses a layered architecture where the deterministic reconstruction engine is the source of truth, and the LLM serves only as a language synthesis layer:
+
+```
+DETERMINISTIC RECONSTRUCTION (Phase 1)
+         ↓
+EVIDENCE CLASSIFICATION
+(PROVEN / DERIVED / INCONSISTENCY / UNKNOWN)
+         ↓
+STRUCTURED EVIDENCE PAYLOAD
+         ↓
+GEMINI LLM (Phase 2)
+         ↓
+STRUCTURED JSON DIAGNOSIS
+         ↓
+NATURAL LANGUAGE EXPLANATION
+```
+
+### System Components
 
 ```
 ┌─────────────────┐
-│   Frontend      │  Static HTML interface
+│   Frontend      │  Static HTML interface (Phase 0 placeholder)
 │   (Minimal)     │  Order ID input + results display
 └────────┬────────┘
          │
          │ HTTP/REST
          ↓
 ┌─────────────────┐
-│   FastAPI       │  /health, /search, /diagnose
-│   Backend       │  Journey reconstruction logic
+│   FastAPI       │  Phase 1: /journeys/{order_id}
+│   Backend       │  Phase 2: /journeys/{order_id}/diagnosis
 └────────┬────────┘
          │
          ├─────────────┐
          ↓             ↓
 ┌─────────────┐  ┌──────────────┐
-│  SQLite DB  │  │  LLM API     │
-│  Events     │  │  (External)  │
+│  SQLite DB  │  │ Gemini API   │
+│  Events     │  │ (External)   │
 │  Orders     │  │              │
+│  Attempts   │  │              │
 └─────────────┘  └──────────────┘
 ```
 
-### Data Flow
-1. User enters Order ID
-2. Backend queries SQLite for related events
-3. Events sorted by timestamp
-4. Journey reconstruction algorithm runs
-5. Evidence classified (Proven/Derived/Inconsistency/Unknown)
-6. Structured evidence sent to LLM
-7. LLM returns constrained explanation
-8. Frontend displays timeline + explanation
+### Critical Architectural Constraints
+
+The LLM (Gemini) does **NOT**:
+- Determine payment facts or journey state
+- Calculate attempt counts, retry gaps, or durations
+- Classify evidence as PROVEN/DERIVED/INCONSISTENCY/UNKNOWN
+- Access raw database records
+
+The LLM **ONLY**:
+- Receives pre-classified structured evidence
+- Converts evidence into natural language explanations
+- Operates under 13 strict anti-hallucination constraints
+
+All facts are established by the deterministic Phase 1 reconstruction engine.
 
 ## Local Setup
 
 ### Prerequisites
 - Python 3.9+
 - pip
+- (Optional) Google Gemini API key for diagnosis endpoint
 
 ### Installation
 
@@ -144,16 +170,34 @@ PaymentTrace is **NOT**:
    pip install -r requirements.txt
    ```
 
-4. **Run backend:**
+4. **Configure Gemini API (Optional):**
+   
+   To use the diagnosis endpoint (`/journeys/{order_id}/diagnosis`), you need a Gemini API key:
+   
    ```bash
-   cd backend
-   uvicorn main:app --reload
+   # Create .env file (NEVER commit this file)
+   cp .env.example .env
+   
+   # Edit .env and add your key:
+   # GEMINI_API_KEY=your_actual_api_key_here
+   ```
+   
+   **IMPORTANT:** The `.env` file is gitignored and must **NEVER** be committed to version control.
+   
+   Without a Gemini API key:
+   - Phase 1 endpoints (`/journeys/{order_id}`) work normally
+   - Phase 2 diagnosis endpoint returns 503 error
+   - All tests still pass (tests use mocked LLM responses)
+
+5. **Run backend:**
+   ```bash
+   python -m uvicorn backend.main:app --reload
    ```
 
-5. **Access API:**
+6. **Access API:**
    - Health check: http://localhost:8000/health
    - API docs: http://localhost:8000/docs
-   - Frontend: Open `frontend/index.html` in browser
+   - Frontend: Open `frontend/index.html` in browser (Phase 0 placeholder)
 
 ### Verify Installation
 
@@ -166,60 +210,182 @@ Expected response:
 {
   "status": "healthy",
   "service": "PaymentTrace",
-  "version": "0.1.0",
-  "phase": "0 - Setup"
+  "version": "0.3.0",
+  "phase": "2 - LLM Diagnostic Integration",
+  "llm_configured": true
 }
 ```
 
 ## Project Status
 
-**Current Phase:** Phase 0 - Setup (IN PROGRESS)
+**Current Phase:** Phase 2 - LLM Diagnostic Integration ✅ **COMPLETE**
 
 See [PROJECT_STATUS.md](PROJECT_STATUS.md) for detailed phase breakdown.
 
 ### What Works Now
-✅ Backend starts successfully  
-✅ Health check endpoint  
-✅ API documentation
+
+**Phase 1 - Deterministic Payment Journey Reconstruction:**
+✅ SQLite database with payment events, attempts, and orders  
+✅ Deterministic journey reconstruction from database records  
+✅ Evidence classification (PROVEN/DERIVED/INCONSISTENCY/UNKNOWN)  
+✅ Chronological event ordering by timestamp  
+✅ Derived fact calculations (attempts, retries, duration, gaps)  
+✅ API endpoint: `GET /journeys/{order_id}`  
+
+**Phase 2 - Evidence-Grounded AI Diagnostic Explanations:**
+✅ Google Gemini LLM integration (`gemini-3.7-flash`)  
+✅ Structured evidence payload generation  
+✅ Constrained system prompt with 13 anti-hallucination rules  
+✅ Structured JSON diagnosis output with Pydantic validation  
+✅ API endpoint: `GET /journeys/{order_id}/diagnosis`  
+✅ Graceful error handling for missing API keys and malformed responses  
+✅ 34/34 tests passing (all LLM calls mocked in tests)  
 
 ### What Doesn't Exist Yet
-❌ Database schema  
-❌ Payment/event ingestion  
-❌ Journey reconstruction logic  
-❌ Evidence classification  
-❌ AI integration  
-❌ Functional diagnostic features
+❌ Functional frontend interface (current UI is Phase 0 placeholder)  
+❌ Production database configuration  
+❌ Real-time event ingestion  
+❌ Authentication or authorization  
+❌ Monitoring and logging  
+❌ Deployment configuration
+
+## API Endpoints
+
+### Phase 1 Endpoints
+
+#### `GET /health`
+Health check with LLM configuration status.
+
+#### `GET /`
+API information and endpoint list.
+
+#### `GET /journeys/{order_id}`
+Deterministic payment journey reconstruction (no LLM required).
+
+Returns structured journey data with:
+- Order details
+- Chronologically ordered events
+- Payment attempts
+- Derived facts (attempts, retries, duration)
+- Evidence classification (PROVEN/DERIVED/INCONSISTENCY/UNKNOWN)
+
+**Example:**
+```bash
+curl http://localhost:8000/journeys/order_scenario_a
+```
+
+### Phase 2 Endpoints
+
+#### `GET /journeys/{order_id}/diagnosis`
+Complete diagnostic report with AI-generated explanation.
+
+Combines Phase 1 reconstruction with Gemini-generated natural language explanation.
+
+**Requires:** `GEMINI_API_KEY` environment variable
+
+**Example:**
+```bash
+curl http://localhost:8000/journeys/order_scenario_a/diagnosis
+```
+
+**Response structure:**
+```json
+{
+  "order_id": "order_scenario_a",
+  "journey": {
+    "order": {...},
+    "events": [...],
+    "attempts": [...],
+    "evidence": [...]
+  },
+  "diagnosis": {
+    "summary": "Brief overview of what happened",
+    "what_happened": "Chronological explanation...",
+    "what_is_known": ["fact 1", "fact 2"],
+    "what_cannot_be_determined": ["unknown 1"],
+    "recommended_action": "Suggested next steps...",
+    "raw_explanation": "Full JSON response from Gemini"
+  },
+  "llm_model": "gemini-3.7-flash",
+  "evidence_based": true
+}
+```
+
+**Note:** The diagnosis endpoint depends on external Gemini API availability. During high demand, Gemini may return 503 errors. This is an external provider issue, not an application error.
 
 ## Development Guidelines
 
 ### Principles
 1. **Evidence-based:** Every conclusion must trace to source data
-2. **Deterministic:** Same input → same reconstruction
+2. **Deterministic:** Same input → same reconstruction (Phase 1)
 3. **Minimal dependencies:** Only add what's necessary
 4. **Clear separation:** Proven facts ≠ Derived insights
 5. **Constrained AI:** LLM receives structured evidence, not raw logs
+6. **Architectural boundary:** Deterministic engine is source of truth, LLM is language layer
 
 ### Code Structure
 ```
 backend/
-  main.py           # FastAPI app + routes
-  models/           # Database models (future)
-  services/         # Business logic (future)
-  utils/            # Helper functions (future)
+  main.py                   # FastAPI app + routes
+  models.py                 # Pydantic models
+  database.py               # SQLite connection and schema
+  services/
+    reconstruction.py       # Phase 1: Deterministic journey reconstruction
+    evidence.py             # Phase 1: Evidence classification
+    llm.py                  # Phase 2: Gemini integration
+  fixtures/
+    data.py                 # Test scenarios
 
 frontend/
-  index.html        # Main interface
+  index.html                # Phase 0 placeholder
 
-tests/              # Test suite (future)
+tests/
+  test_reconstruction.py    # Phase 1 tests
+  test_api.py               # Phase 1 API tests
+  test_llm.py               # Phase 2 LLM service tests (mocked)
+  test_diagnosis_api.py     # Phase 2 diagnosis endpoint tests (mocked)
 ```
+
+### Testing
+
+Run the complete test suite:
+```bash
+pytest -v
+```
+
+**All 34 tests use mocked Gemini responses.** Tests do **NOT** require a real `GEMINI_API_KEY` and will not make external API calls.
+
+Test breakdown:
+- **10 tests:** Phase 1 reconstruction logic
+- **8 tests:** Phase 1 API endpoints
+- **8 tests:** Phase 2 LLM service (mocked)
+- **8 tests:** Phase 2 diagnosis endpoint (mocked)
+
+## Limitations and Disclaimers
+
+**This is an MVP for development and demonstration purposes.**
+
+PaymentTrace is **NOT**:
+- Production-ready for real payment processing
+- Guaranteed to prevent LLM hallucinations (constrained, not perfect)
+- Validated for accuracy on real-world payment data
+- Suitable for compliance-critical or financial reporting use cases
+- A replacement for proper payment gateway investigation tools
+
+**Known Limitations:**
+- Fixture data only (no real Razorpay production data)
+- Frontend is Phase 0 placeholder (not functional)
+- Diagnosis endpoint depends on external Gemini API availability
+- No authentication, rate limiting, or production safeguards
+- SQLite database (not suitable for production scale)
 
 ## Contributing
 
-This is an MVP under active development. Focus areas:
-- Database schema design
-- Journey reconstruction algorithm
-- Evidence classification logic
-- LLM prompt engineering
+This is an MVP under active development. Current implementation status:
+- ✅ Phase 0: Project Setup
+- ✅ Phase 1: Deterministic Reconstruction
+- ✅ Phase 2: LLM Diagnostic Integration
+- ⏳ Phase 3: Frontend Interface (next)
 
 ## License
 
@@ -227,5 +393,7 @@ See [LICENSE](LICENSE) file.
 
 ---
 
-**Version:** 0.1.0  
-**Last Updated:** September 4, 2026
+**Version:** 0.3.0  
+**Last Updated:** September 5, 2026  
+**Current Branch:** `feature/phase2-llm-integration`  
+**Current Commit:** `418e790`

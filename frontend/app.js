@@ -1,5 +1,5 @@
 // Configuration
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = 'https://paymenttrace-api.onrender.com';
 
 // DOM Elements
 const orderIdInput = document.getElementById('orderIdInput');

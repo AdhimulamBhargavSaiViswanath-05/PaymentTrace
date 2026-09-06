@@ -500,9 +500,9 @@ open frontend/index.html  # macOS
 # or navigate to: file:///path/to/PaymentTrace/frontend/index.html
 ```
 
-**Backend:** http://localhost:8000  
-**API Docs:** http://localhost:8000/docs  
-**Health Check:** http://localhost:8000/health
+**Backend:** https://paymenttrace-api.onrender.com  
+**API Docs:** https://paymenttrace-api.onrender.com/docs  
+**Health Check:** https://paymenttrace-api.onrender.com/health
 
 **Note:** Without a Gemini API key, Phase 1 endpoints (`/journeys/{order_id}`) work normally. Phase 2 diagnosis endpoint returns 503 error. All 76 tests still pass (tests use mocked LLM responses).
 
@@ -524,7 +524,7 @@ Deterministic payment journey reconstruction
 
 **Example:**
 ```bash
-curl http://localhost:8000/journeys/order_scenario_a
+curl https://paymenttrace-api.onrender.com/journeys/order_scenario_a
 ```
 
 ### Phase 2: Evidence-Backed Diagnosis (Requires Gemini API Key)
@@ -534,7 +534,7 @@ Complete diagnostic report with AI-generated explanation
 
 **Example:**
 ```bash
-curl http://localhost:8000/journeys/order_scenario_h/diagnosis
+curl https://paymenttrace-api.onrender.com/journeys/order_scenario_h/diagnosis
 ```
 
 ---

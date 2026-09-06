@@ -209,7 +209,7 @@ frontend/
 **Data Flow:**
 ```javascript
 // API call
-fetch(`http://localhost:8000/journeys/${orderId}/diagnosis`)
+fetch(`https://paymenttrace-api.onrender.com/journeys/${orderId}/diagnosis`)
   → Parse JSON response
   → Render order summary (data.journey.order)
   → Render timeline (data.journey.events)
